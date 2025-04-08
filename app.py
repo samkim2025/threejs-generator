@@ -20,6 +20,10 @@ if "current_scene" not in st.session_state:
     st.session_state.current_scene = None
 if "debug_info" not in st.session_state:
     st.session_state.debug_info = {}
+if "raw_prompt" not in st.session_state:
+    st.session_state.raw_prompt = ""
+if "enhanced_prompt" not in st.session_state:
+    st.session_state.enhanced_prompt = ""
 
 # Pre-built scenes (keeping the existing code)
 def get_rabbit_turtle_scene():
@@ -781,6 +785,67 @@ def get_forest_scene():
 # Get API key (using environment variable rather than secrets for simplicity)
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 
+# NEW: Prompt enhancement function
+async def enhance_prompt(basic_prompt):
+    """Takes a simple prompt and expands it with detailed Three.js specifications"""
+    try:
+        headers = {
+            "x-api-key": ANTHROPIC_API_KEY,
+            "content-type": "application/json",
+            "anthropic-version": "2023-06-01"
+        }
+        
+        system_prompt = """You are an expert in Three.js scene creation. Your task is to expand simple scene descriptions into detailed technical specifications that can be implemented in Three.js.
+
+For any simple scene description, generate a highly detailed specification that covers:
+
+1. Scene elements with precise geometries, materials, and positioning
+2. Lighting setup with multiple light sources, shadows, and ambient lighting
+3. Animation details for all moving elements
+4. Camera settings and controls
+5. Interactive elements and behaviors
+6. Background and environmental details
+7. Advanced visual effects where appropriate
+
+Your output should be extremely detailed and technical, similar to a professional game developer's specification document. Include specific Three.js classes, methods, and techniques."""
+        
+        data = {
+            "model": "claude-3-opus-20240229",
+            "max_tokens": 2000,
+            "temperature": 0.2,
+            "system": system_prompt,
+            "messages": [
+                {"role": "user", "content": f"""Take this simple scene description:
+                
+"{basic_prompt}"
+                
+Expand it into a highly detailed Three.js technical specification with precise details about geometries, materials, lighting, animations, and interactions. Be extremely specific and thorough, describing every element in detail.
+                
+Format the response as a detailed technical brief that a Three.js developer would follow to implement the scene."""}
+            ]
+        }
+        
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            response = await client.post(
+                "https://api.anthropic.com/v1/messages",
+                json=data,
+                headers=headers
+            )
+            
+            if response.status_code != 200:
+                return basic_prompt, f"Error enhancing prompt: {response.status_code}"
+            
+            response_data = response.json()
+            
+            if "content" in response_data and len(response_data["content"]) > 0:
+                enhanced_prompt = response_data["content"][0]["text"]
+                return enhanced_prompt, None
+            else:
+                return basic_prompt, "No content in response"
+    
+    except Exception as e:
+        return basic_prompt, f"Exception enhancing prompt: {str(e)}"
+
 # Direct approach to API call with better debugging
 async def call_anthropic_api(prompt):
     try:
@@ -790,27 +855,39 @@ async def call_anthropic_api(prompt):
             "anthropic-version": "2023-06-01"
         }
         
-        # Simplified system prompt focused on what works
-        system_prompt = """You are an expert in Three.js. Create a complete, standalone HTML file with a Three.js scene based on the user's description. 
-        
-        Include:
-        1. All necessary Three.js imports from the CDN (use version 0.137.0 from unpkg)
-        2. A complete HTML structure
-        3. Scene, camera, renderer setup
-        4. OrbitControls for user interaction
-        5. Appropriate lighting
-        6. The 3D objects described by the user
-        7. Animation using requestAnimationFrame
-        8. Proper window resize handling
-        
-        Make sure the scene has:
-        - Shadow rendering
-        - Interactive camera controls
-        - Attractive materials and lighting
-        - Animation where appropriate
-        
-        Do not use any external assets or textures that require loading.
-        Create all geometries using Three.js built-in shapes."""
+        # Improved system prompt with more detailed guidance
+        system_prompt = """You are an expert in Three.js 3D scene creation.
+
+Your task is to generate a complete, standalone HTML document with an interactive Three.js scene based on the user's description.
+
+Create a fully detailed scene with:
+
+1. Complex geometries broken down into component parts (not just basic shapes)
+2. Group objects for composite entities (like characters, vehicles, buildings)
+3. Detailed materials with appropriate properties (roughness, metalness, etc.)
+4. Multiple light sources with shadows and proper intensity
+5. Dynamic animations that bring the scene to life
+6. Camera controls that allow exploring the scene
+7. Proper scaling and positioning of all elements
+8. A sky/background that fits the scene's theme
+9. Proper coding structure with well-named functions and variables
+10. Performance optimizations like object instancing where appropriate
+
+When creating objects:
+- Use groups and subgroups for complex objects
+- Add fine details to make objects recognizable
+- Use appropriate materials with realistic properties
+- Position objects thoughtfully in the scene
+
+For animations:
+- Create smooth, natural movements
+- Use sine/cosine for organic motion
+- Add small random variations for realism
+- Animate multiple properties (position, rotation, scale)
+
+Implement everything as a single, complete HTML file using Three.js version 0.137.0.
+Do not use external assets or textures - create everything programmatically.
+Include ONLY the code with no explanations."""
         
         data = {
             "model": "claude-3-opus-20240229",
@@ -818,7 +895,7 @@ async def call_anthropic_api(prompt):
             "temperature": 0.2,
             "system": system_prompt,
             "messages": [
-                {"role": "user", "content": f"Create a complete Three.js scene with: {prompt}. Return ONLY the complete HTML file with no explanations before or after the code."}
+                {"role": "user", "content": f"Create a complete Three.js scene with: {prompt}. Return ONLY HTML code with no explanations. Make it visually impressive with detailed geometries and animations."}
             ]
         }
         
@@ -828,7 +905,7 @@ async def call_anthropic_api(prompt):
             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         }
         
-        async with httpx.AsyncClient(timeout=120.0) as client:
+        async with httpx.AsyncClient(timeout=180.0) as client:
             response = await client.post(
                 "https://api.anthropic.com/v1/messages",
                 json=data,
@@ -910,7 +987,49 @@ def extract_html_from_response(response_text):
         </html>
         """
     
-    # If all else fails, consider the entire response as JS code and wrap it
+    # If all else fails, try to extract any code-like content
+    # Look for JavaScript-like content with typical Three.js patterns
+    js_patterns = [
+        r"const scene = new THREE\.Scene\(\);",
+        r"new THREE\.(\w+)\(",
+        r"renderer\.render\(scene, camera\);"
+    ]
+    
+    for pattern in js_patterns:
+        if re.search(pattern, response_text):
+            # Found some Three.js code, wrap it properly
+            return f"""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="utf-8">
+                <title>Generated Three.js Scene</title>
+                <style>
+                    body {{ margin: 0; overflow: hidden; }}
+                    #info {{
+                        position: absolute;
+                        top: 10px;
+                        width: 100%;
+                        text-align: center;
+                        color: white;
+                        font-family: Arial, sans-serif;
+                        pointer-events: none;
+                        text-shadow: 1px 1px 1px black;
+                    }}
+                </style>
+            </head>
+            <body>
+                <div id="info">Generated Three.js Scene - Use mouse to navigate</div>
+                <script src="https://unpkg.com/three@0.137.0/build/three.min.js"></script>
+                <script src="https://unpkg.com/three@0.137.0/examples/js/controls/OrbitControls.js"></script>
+                <script>
+                {response_text}
+                </script>
+            </body>
+            </html>
+            """
+    
+    # Last resort fallback - just wrap the entire response
     return f"""
     <!DOCTYPE html>
     <html>
@@ -936,25 +1055,86 @@ def extract_html_from_response(response_text):
         <script src="https://unpkg.com/three@0.137.0/build/three.min.js"></script>
         <script src="https://unpkg.com/three@0.137.0/examples/js/controls/OrbitControls.js"></script>
         <script>
-        {response_text}
+        // Scene setup
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        document.body.appendChild(renderer.domElement);
+
+        // Controls
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        camera.position.set(0, 5, 10);
+        controls.update();
+
+        // Lights
+        const ambientLight = new THREE.AmbientLight(0x404040, 0.5);
+        scene.add(ambientLight);
+        
+        const dirLight = new THREE.DirectionalLight(0xffffff, 1);
+        dirLight.position.set(5, 10, 7.5);
+        dirLight.castShadow = true;
+        scene.add(dirLight);
+        
+        // Parse and attempt to create objects from the response
+        try {{
+            {response_text}
+        }} catch (e) {{
+            console.error("Error processing response:", e);
+            // Create a fallback object
+            const geometry = new THREE.SphereGeometry(2, 32, 32);
+            const material = new THREE.MeshPhongMaterial({{ color: 0xff0000 }});
+            const sphere = new THREE.Mesh(geometry, material);
+            sphere.castShadow = true;
+            scene.add(sphere);
+        }}
+        
+        // Animation
+        function animate() {{
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+        }}
+        animate();
+        
+        // Handle window resize
+        window.addEventListener('resize', function() {{
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }});
         </script>
     </body>
     </html>
     """
 
-def get_custom_scene(prompt):
-    # Use async function to call API
-    response_text, debug_info = asyncio.run(call_anthropic_api(prompt))
+# NEW: Get custom scene with prompt enhancement
+async def get_custom_scene_with_enhancement(basic_prompt):
+    """Generate a Three.js scene using two-step process with prompt enhancement"""
     
-    # Store debug info in session state
+    # Step 1: Enhance the basic prompt
+    enhanced_prompt, enhance_error = await enhance_prompt(basic_prompt)
+    
+    # Store both prompts for debugging
+    st.session_state.raw_prompt = basic_prompt
+    st.session_state.enhanced_prompt = enhanced_prompt
+    
+    if enhance_error:
+        st.warning(f"Warning: Using basic prompt because enhancement failed: {enhance_error}")
+    
+    # Step 2: Call the API with the enhanced prompt
+    response_text, debug_info = await call_anthropic_api(enhanced_prompt)
+    
+    # Store debug info
     st.session_state.debug_info = debug_info
     
     if response_text:
         # Extract HTML from response
         html_content = extract_html_from_response(response_text)
-        return html_content, response_text
+        return html_content, response_text, enhanced_prompt
     else:
-        return None, None
+        return None, None, enhanced_prompt
 
 # Main app
 st.title("🎮 Three.js Scene Generator")
@@ -995,43 +1175,115 @@ with tab2:
             height=100
         )
         
+        # Checkbox to view enhanced prompt before generation
+        show_enhanced = st.checkbox("Show enhanced prompt before generation")
+        
         submitted = st.form_submit_button("Generate Custom Scene")
         
         if submitted and user_prompt:
-            with st.spinner("Generating your 3D scene... (this may take up to a minute)"):
-                # Call API to generate scene
-                html_content, full_response = get_custom_scene(user_prompt)
-                
-                if html_content:
-                    # Save current scene to state
-                    st.session_state.current_scene = {
-                        "prompt": user_prompt,
-                        "html": html_content, 
-                        "full_response": full_response,
-                        "is_preset": False
-                    }
-                    st.success("Scene generated successfully!")
-                else:
-                    st.error("Failed to generate scene. See Debug tab for details.")
+            if show_enhanced:
+                # Just show the enhanced prompt without generating
+                with st.spinner("Enhancing your prompt..."):
+                    enhanced_prompt, enhance_error = asyncio.run(enhance_prompt(user_prompt))
+                    if enhance_error:
+                        st.error(f"Error enhancing prompt: {enhance_error}")
+                    else:
+                        st.session_state.raw_prompt = user_prompt
+                        st.session_state.enhanced_prompt = enhanced_prompt
+                        
+                        st.subheader("Enhanced Prompt")
+                        st.write(enhanced_prompt)
+                        
+                        if st.button("Continue with this enhanced prompt"):
+                            with st.spinner("Generating your 3D scene... (this may take up to a minute)"):
+                                # Call API with enhanced prompt
+                                html_content, full_response = asyncio.run(call_anthropic_api(enhanced_prompt))
+                                
+                                if html_content:
+                                    # Extract HTML
+                                    final_html = extract_html_from_response(html_content)
+                                    
+                                    # Save current scene to state
+                                    st.session_state.current_scene = {
+                                        "prompt": user_prompt,
+                                        "enhanced_prompt": enhanced_prompt,
+                                        "html": final_html, 
+                                        "full_response": full_response,
+                                        "is_preset": False
+                                    }
+                                    st.success("Scene generated successfully!")
+                                else:
+                                    st.error("Failed to generate scene. See Debug tab for details.")
+            else:
+                # Generate directly with enhanced prompt
+                with st.spinner("Generating your 3D scene with enhanced details... (this may take up to 2 minutes)"):
+                    # Use the two-step process
+                    html_content, full_response, enhanced_prompt = asyncio.run(get_custom_scene_with_enhancement(user_prompt))
+                    
+                    if html_content:
+                        # Save current scene to state
+                        st.session_state.current_scene = {
+                            "prompt": user_prompt,
+                            "enhanced_prompt": enhanced_prompt,
+                            "html": html_content, 
+                            "full_response": full_response,
+                            "is_preset": False
+                        }
+                        st.success("Scene generated successfully!")
+                    else:
+                        st.error("Failed to generate scene. See Debug tab for details.")
 
 with tab3:
     st.subheader("Debug Information")
     
+    # Show prompt comparison
+    if "raw_prompt" in st.session_state and "enhanced_prompt" in st.session_state:
+        st.subheader("Prompt Enhancement")
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.write("Original Prompt")
+            st.info(st.session_state.raw_prompt)
+        
+        with col2:
+            st.write("Enhanced Prompt")
+            st.success(st.session_state.enhanced_prompt)
+    
+    # Show API debug info
     if "debug_info" in st.session_state and st.session_state.debug_info:
+        st.subheader("API Debug Info")
         debug_info = st.session_state.debug_info
         
-        st.json(debug_info)
+        with st.expander("Request Details"):
+            if "request" in debug_info:
+                st.json(debug_info["request"])
         
-        if "error" in debug_info:
-            st.error(f"Error: {debug_info['error']}")
-    else:
-        st.info("No debug information available yet. Generate a custom scene to see debug data.")
+        with st.expander("Response Details"):
+            if "status_code" in debug_info:
+                st.write(f"Status Code: {debug_info['status_code']}")
+            
+            if "error" in debug_info:
+                st.error(f"Error: {debug_info['error']}")
+            
+            if "response" in debug_info:
+                # Show a simplified version to avoid overwhelming the UI
+                simplified_response = {
+                    "model": debug_info["response"].get("model", ""),
+                    "usage": debug_info["response"].get("usage", {}),
+                    "content_length": len(str(debug_info["response"].get("content", [])))
+                }
+                st.json(simplified_response)
 
 # Display current scene if available
 if st.session_state.current_scene:
     scene = st.session_state.current_scene
     
     st.subheader(f"Scene: {scene['prompt']}")
+    
+    # Show enhanced prompt if available
+    if "enhanced_prompt" in scene and not scene.get("is_preset", False):
+        with st.expander("View Enhanced Prompt"):
+            st.write(scene["enhanced_prompt"])
     
     # Render the Three.js scene
     st.components.v1.html(scene["html"], height=600)
@@ -1058,18 +1310,21 @@ st.markdown("""
 
 1. **Preset Scenes**: Choose from pre-built scenes in the first tab
 2. **Custom Scenes**: Describe your own scene in the second tab
-3. **Debug Info**: View API request/response details in the third tab
+   - Optionally check "Show enhanced prompt" to review the detailed prompt before generation
+3. **Debug Info**: View prompts and API details in the third tab
 4. **Interact** with any scene using your mouse:
    - Left-click + drag: Rotate the camera
    - Right-click + drag: Pan the camera
    - Scroll: Zoom in/out
 5. **Download**: Save the HTML to open in your browser
 
-### Troubleshooting
+### About Prompt Enhancement
 
-If custom scene generation fails:
-1. Check the Debug tab for API response details
-2. Try a simpler description
-3. Make sure your API key is correct in the environment variable
-4. Download the HTML to run locally for best performance
+The prompt enhancer transforms simple descriptions into detailed technical specifications, leading to more sophisticated scenes with:
+- Complex geometries instead of basic shapes
+- Detailed materials and lighting
+- More realistic animations
+- Better organized scene elements
+
+This two-step process helps bridge the gap between simple descriptions and highly detailed Three.js implementations.
 """)
