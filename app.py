@@ -7,7 +7,7 @@ import httpx
 
 # Set page configuration
 st.set_page_config(
-    page_title="Three.js Scene Generator",
+    page_title="AI Three.js Scene Generator",
     page_icon="🎮",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -137,31 +137,223 @@ def create_html_with_code(threejs_code, code_type):
     if code_type == "html" and "<html" in threejs_code.lower():
         return threejs_code
     
-    # If we have JavaScript code, wrap it in HTML
-    if code_type == "js" and not "<html" in threejs_code.lower():
-        return f"""
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <meta charset="utf-8">
-            <title>AI Generated Three.js Scene</title>
-            <style>
-                body {{ margin: 0; overflow: hidden; }}
-                canvas {{ width: 100%; height: 100%; display: block; }}
-            </style>
-            <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
-            <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/js/controls/OrbitControls.js"></script>
-        </head>
-        <body>
-            <script>
+    # If we have JavaScript code, wrap it in HTML with error tracking
+    return f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <title>AI Generated Three.js Scene</title>
+        <style>
+            body {{ margin: 0; overflow: hidden; }}
+            canvas {{ width: 100%; height: 100%; display: block; }}
+            #error-display {{
+                position: fixed;
+                bottom: 10px;
+                left: 10px;
+                background: rgba(255,0,0,0.7);
+                color: white;
+                padding: 10px;
+                font-family: monospace;
+                max-width: 80%;
+                z-index: 1000;
+                white-space: pre-wrap;
+            }}
+        </style>
+    </head>
+    <body>
+        <div id="error-display"></div>
+        
+        <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/js/controls/OrbitControls.js"></script>
+        
+        <script>
+        // Error tracking
+        window.addEventListener('error', function(e) {{
+            document.getElementById('error-display').innerHTML += '<div>' + e.message + '</div>';
+            console.error(e);
+        }});
+        
+        // Check WebGL compatibility
+        if (!window.WebGLRenderingContext) {{
+            document.getElementById('error-display').innerHTML = 
+                '<div>Your browser does not support WebGL, which is required for Three.js</div>';
+        }}
+        
+        // Add a simple cube if no other objects are defined
+        function addTestCube(scene) {{
+            const geometry = new THREE.BoxGeometry(1, 1, 1);
+            const material = new THREE.MeshPhongMaterial({{ color: 0xff0000 }});
+            const cube = new THREE.Mesh(geometry, material);
+            scene.add(cube);
+            return cube;
+        }}
+        
+        try {{
             {threejs_code}
-            </script>
-        </body>
-        </html>
-        """
-    
-    # If we have generic code or empty code, return as is
-    return threejs_code if threejs_code.strip() else ""
+            
+            // Check if there's a scene and camera defined, otherwise create minimal ones
+            if (typeof scene === 'undefined') {{
+                console.log("No scene defined, creating minimal scene");
+                window.scene = new THREE.Scene();
+                window.camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+                window.renderer = new THREE.WebGLRenderer({{ antialias: true }});
+                renderer.setSize(window.innerWidth, window.innerHeight);
+                document.body.appendChild(renderer.domElement);
+                
+                // Add light
+                const light = new THREE.DirectionalLight(0xffffff, 1);
+                light.position.set(0, 1, 1).normalize();
+                scene.add(light);
+                
+                // Add ambient light
+                scene.add(new THREE.AmbientLight(0x404040));
+                
+                // Add a cube
+                const cube = addTestCube(scene);
+                
+                // Position camera
+                camera.position.z = 5;
+                
+                // Animation loop
+                function animate() {{
+                    requestAnimationFrame(animate);
+                    cube.rotation.x += 0.01;
+                    cube.rotation.y += 0.01;
+                    renderer.render(scene, camera);
+                }}
+                animate();
+            }}
+            
+            // Make sure animation is running
+            if (typeof animate === 'function' && !window._animationStarted) {{
+                window._animationStarted = true;
+                animate();
+            }}
+            
+        }} catch(e) {{
+            document.getElementById('error-display').innerHTML += '<div>Error: ' + e.message + '</div>';
+            console.error(e);
+            
+            // Create a fallback scene on error
+            try {{
+                console.log("Creating fallback scene");
+                const scene = new THREE.Scene();
+                const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+                const renderer = new THREE.WebGLRenderer({{ antialias: true }});
+                renderer.setSize(window.innerWidth, window.innerHeight);
+                document.body.appendChild(renderer.domElement);
+                
+                // Add light
+                const light = new THREE.DirectionalLight(0xffffff, 1);
+                light.position.set(0, 1, 1).normalize();
+                scene.add(light);
+                
+                // Add ambient light
+                scene.add(new THREE.AmbientLight(0x404040));
+                
+                // Add a cube
+                const cube = new THREE.Mesh(
+                    new THREE.BoxGeometry(1, 1, 1),
+                    new THREE.MeshPhongMaterial({{ color: 0xff0000 }})
+                );
+                scene.add(cube);
+                
+                // Position camera
+                camera.position.z = 5;
+                
+                // Animation loop
+                function animate() {{
+                    requestAnimationFrame(animate);
+                    cube.rotation.x += 0.01;
+                    cube.rotation.y += 0.01;
+                    renderer.render(scene, camera);
+                }}
+                animate();
+                
+                document.getElementById('error-display').innerHTML += '<div>Fallback scene created</div>';
+            }} catch(fallbackError) {{
+                document.getElementById('error-display').innerHTML += '<div>Fallback failed: ' + fallbackError.message + '</div>';
+            }}
+        }}
+        </script>
+    </body>
+    </html>
+    """
+
+def test_threejs_scene():
+    """Create a simple test Three.js scene."""
+    return """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Three.js Test</title>
+        <style>
+            body { margin: 0; overflow: hidden; }
+            #info { 
+                position: absolute; 
+                top: 10px; 
+                width: 100%; 
+                text-align: center; 
+                color: white;
+                background-color: rgba(0,0,0,0.5);
+                padding: 5px;
+                font-family: Arial, sans-serif;
+            }
+        </style>
+    </head>
+    <body>
+        <div id="info">Basic Three.js Test - Rotating Cube</div>
+        <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+        <script>
+            // Set up scene
+            const scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x333333);
+            
+            const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            
+            const renderer = new THREE.WebGLRenderer({antialias: true});
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.body.appendChild(renderer.domElement);
+            
+            // Add lights
+            const ambientLight = new THREE.AmbientLight(0x404040);
+            scene.add(ambientLight);
+            
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+            directionalLight.position.set(1, 1, 1).normalize();
+            scene.add(directionalLight);
+            
+            // Create a cube
+            const geometry = new THREE.BoxGeometry();
+            const material = new THREE.MeshPhongMaterial({ 
+                color: 0x00ff00,
+                shininess: 100
+            });
+            const cube = new THREE.Mesh(geometry, material);
+            scene.add(cube);
+            
+            camera.position.z = 5;
+            
+            // Handle window resize
+            window.addEventListener('resize', function() {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            });
+            
+            // Animation loop
+            function animate() {
+                requestAnimationFrame(animate);
+                cube.rotation.x += 0.01;
+                cube.rotation.y += 0.01;
+                renderer.render(scene, camera);
+            }
+            animate();
+        </script>
+    </body>
+    </html>
+    """
 
 def add_to_history(prompt, html_content):
     """Add a generated scene to history."""
@@ -187,10 +379,57 @@ with st.sidebar:
                 st.session_state.current_scene = item
     else:
         st.info("Your generated scenes will appear here")
+    
+    # Add a test scene button
+    if st.button("Test Basic Three.js"):
+        test_html = test_threejs_scene()
+        st.session_state.current_scene = {
+            "prompt": "Basic Three.js Test",
+            "html": test_html,
+            "code": "// Basic test scene code",
+            "code_type": "js",
+            "full_response": "Test scene",
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        }
 
 # Main content
 st.title("🎮 AI Three.js Scene Generator")
 st.write("Enter a description and get a 3D scene generated with Three.js")
+
+# Debug info 
+with st.expander("Debug Info"):
+    st.write("This section helps troubleshoot rendering issues")
+    st.code("""
+    // Browser Compatibility
+    - Check if your browser supports WebGL (required for Three.js)
+    - Make sure JavaScript is enabled
+    
+    // Common Issues
+    - Black screen: Usually means the scene is created but nothing is visible
+    - No renderer: The canvas element might not be properly added to the DOM
+    - Camera issues: Objects might be out of view of the camera
+    - Error in console: Check browser developer tools (F12) for JavaScript errors
+    """)
+    
+    # WebGL check button
+    if st.button("Check WebGL Support"):
+        webgl_check = """
+        <script>
+        function checkWebGL() {
+            try {
+                var canvas = document.createElement('canvas');
+                return !!window.WebGLRenderingContext && 
+                    (canvas.getContext('webgl') || canvas.getContext('experimental-webgl'));
+            } catch(e) {
+                return false;
+            }
+        }
+        document.write(checkWebGL() ? 
+            '<div style="color:green;font-weight:bold">WebGL is supported!</div>' : 
+            '<div style="color:red;font-weight:bold">WebGL is NOT supported!</div>');
+        </script>
+        """
+        st.components.v1.html(webgl_check, height=50)
 
 # Input form
 with st.form("scene_generator_form"):
@@ -254,7 +493,7 @@ if st.session_state.current_scene:
     render_threejs_scene(scene["html"])
     
     # Display code and response
-    tab1, tab2 = st.tabs(["Generated Code", "AI Response"])
+    tab1, tab2, tab3 = st.tabs(["Generated Code", "AI Response", "Rendering Info"])
     
     with tab1:
         st.code(scene.get("code", ""), language="javascript")
@@ -271,6 +510,63 @@ if st.session_state.current_scene:
     
     with tab2:
         st.text_area("Full AI Response", value=scene.get("full_response", ""), height=400, disabled=True)
+    
+    with tab3:
+        st.markdown("""
+        ### Troubleshooting Rendering Issues
+        
+        If you see a black screen:
+        1. Download the HTML and open it directly in your browser
+        2. Check browser console (F12 > Console) for errors
+        3. Try the 'Test Basic Three.js' button in the sidebar
+        
+        Common issues:
+        - **Camera position**: Objects might be out of view
+        - **Missing lights**: Scene might be too dark
+        - **Animation not started**: The render loop might not be running
+        - **WebGL issues**: Browser might not support specific features
+        
+        Try adding this to the console to debug camera position:
+        ```javascript
+        console.log(camera.position);
+        ```
+        """)
+        
+        if st.button("Try Simple Cube Render"):
+            simple_cube = """
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <style>body { margin: 0; }</style>
+            </head>
+            <body>
+                <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+                <script>
+                    const scene = new THREE.Scene();
+                    const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+                    const renderer = new THREE.WebGLRenderer();
+                    renderer.setSize(window.innerWidth, window.innerHeight);
+                    document.body.appendChild(renderer.domElement);
+                    
+                    const geometry = new THREE.BoxGeometry();
+                    const material = new THREE.MeshBasicMaterial({color: 0x00ff00});
+                    const cube = new THREE.Mesh(geometry, material);
+                    scene.add(cube);
+                    
+                    camera.position.z = 5;
+                    
+                    function animate() {
+                        requestAnimationFrame(animate);
+                        cube.rotation.x += 0.01;
+                        cube.rotation.y += 0.01;
+                        renderer.render(scene, camera);
+                    }
+                    animate();
+                </script>
+            </body>
+            </html>
+            """
+            st.components.v1.html(simple_cube, height=300)
 
 # Instructions
 st.markdown("---")
