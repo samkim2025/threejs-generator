@@ -7,7 +7,7 @@ import httpx
 
 # Set page configuration
 st.set_page_config(
-    page_title="AI Three.js Scene Generator",
+    page_title="Three.js Scene Generator",
     page_icon="🎮",
     layout="wide",
     initial_sidebar_state="expanded"
