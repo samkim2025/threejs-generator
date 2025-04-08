@@ -296,11 +296,13 @@ def create_test_scene():
 # Add a scene to history
 def add_to_history(prompt, html_content):
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    st.session_state.history.append({
+    new_scene = {
         "prompt": prompt,
         "html": html_content,
         "timestamp": timestamp
-    })
+    }
+    st.session_state.history.append(new_scene)
+    return new_scene
 
 # Main sidebar
 with st.sidebar:
@@ -309,21 +311,290 @@ with st.sidebar:
     if st.session_state.history:
         for i, item in enumerate(st.session_state.history):
             if st.button(f"Scene {i+1}: {item['prompt'][:30]}...", key=f"history_{i}"):
-                st.session_state.current_scene = item
+                # Ensure all required keys exist
+                if "html" not in item:
+                    st.error(f"Scene {i+1} is missing HTML content")
+                else:
+                    st.session_state.current_scene = item
     else:
         st.info("Your generated scenes will appear here")
     
     if st.button("WebGL Test Scene"):
         test_html = create_test_scene()
-        st.session_state.current_scene = {
+        test_scene = {
             "prompt": "Test Scene with Rotating Cube",
             "html": test_html,
             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         }
+        st.session_state.current_scene = test_scene
+
+# Fixed scene for rabbits and turtles
+def create_rabbit_turtle_scene():
+    return """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Rabbit and Turtle Running on a Hill</title>
+        <style>
+            body { margin: 0; overflow: hidden; }
+            #info {
+                position: absolute;
+                top: 10px;
+                width: 100%;
+                text-align: center;
+                color: white;
+                font-family: Arial, sans-serif;
+                pointer-events: none;
+                text-shadow: 1px 1px 1px black;
+            }
+        </style>
+    </head>
+    <body>
+        <div id="info">Rabbit and Turtle Running on a Hill - Use mouse to navigate</div>
+        <script src="https://unpkg.com/three@0.137.0/build/three.min.js"></script>
+        <script src="https://unpkg.com/three@0.137.0/examples/js/controls/OrbitControls.js"></script>
+        <script>
+            // Create a scene
+            const scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x87CEEB); // Sky blue background
+
+            // Create a camera
+            const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 5, 10);
+            camera.lookAt(0, 0, 0);
+
+            // Create a renderer
+            const renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            document.body.appendChild(renderer.domElement);
+
+            // Add orbit controls
+            const controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+
+            // Add ambient light
+            const ambientLight = new THREE.AmbientLight(0x404040);
+            scene.add(ambientLight);
+
+            // Create a directional light
+            const light = new THREE.DirectionalLight(0xffffff, 1);
+            light.position.set(0, 10, 5);
+            light.castShadow = true;
+            light.shadow.mapSize.width = 2048;
+            light.shadow.mapSize.height = 2048;
+            scene.add(light);
+
+            // Create a hill
+            const hillGeometry = new THREE.CylinderGeometry(8, 8, 2, 32, 1, false);
+            const hillMaterial = new THREE.MeshPhongMaterial({ color: 0x7CFC00 });
+            const hill = new THREE.Mesh(hillGeometry, hillMaterial);
+            hill.position.y = -1;
+            hill.receiveShadow = true;
+            scene.add(hill);
+
+            // Create a path around the hill
+            const pathGeometry = new THREE.TorusGeometry(6, 0.3, 16, 100);
+            const pathMaterial = new THREE.MeshPhongMaterial({ color: 0x8B4513 });
+            const path = new THREE.Mesh(pathGeometry, pathMaterial);
+            path.rotation.x = Math.PI / 2;
+            path.position.y = 0.05;
+            path.receiveShadow = true;
+            scene.add(path);
+
+            // Create a rabbit using basic geometries
+            function createRabbit() {
+                const rabbit = new THREE.Group();
+                
+                // Rabbit body
+                const bodyGeometry = new THREE.SphereGeometry(0.5, 16, 16);
+                const bodyMaterial = new THREE.MeshPhongMaterial({ color: 0xFFFFFF });
+                const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
+                body.castShadow = true;
+                rabbit.add(body);
+                
+                // Rabbit head
+                const headGeometry = new THREE.SphereGeometry(0.3, 16, 16);
+                const headMaterial = new THREE.MeshPhongMaterial({ color: 0xFFFFFF });
+                const head = new THREE.Mesh(headGeometry, headMaterial);
+                head.position.set(0, 0.4, 0.3);
+                head.castShadow = true;
+                rabbit.add(head);
+                
+                // Rabbit ears
+                const earGeometry = new THREE.CylinderGeometry(0.05, 0.05, 0.5, 12);
+                const earMaterial = new THREE.MeshPhongMaterial({ color: 0xFFCCCC });
+                
+                const leftEar = new THREE.Mesh(earGeometry, earMaterial);
+                leftEar.position.set(-0.1, 0.7, 0.3);
+                leftEar.rotation.set(0, 0, -0.2);
+                leftEar.castShadow = true;
+                rabbit.add(leftEar);
+                
+                const rightEar = new THREE.Mesh(earGeometry, earMaterial);
+                rightEar.position.set(0.1, 0.7, 0.3);
+                rightEar.rotation.set(0, 0, 0.2);
+                rightEar.castShadow = true;
+                rabbit.add(rightEar);
+                
+                // Rabbit tail
+                const tailGeometry = new THREE.SphereGeometry(0.15, 16, 16);
+                const tailMaterial = new THREE.MeshPhongMaterial({ color: 0xFFFFFF });
+                const tail = new THREE.Mesh(tailGeometry, tailMaterial);
+                tail.position.set(0, 0, -0.5);
+                tail.castShadow = true;
+                rabbit.add(tail);
+                
+                // Rabbit legs
+                const legGeometry = new THREE.CylinderGeometry(0.05, 0.05, 0.4, 12);
+                const legMaterial = new THREE.MeshPhongMaterial({ color: 0xFFFFFF });
+                
+                const frontLeftLeg = new THREE.Mesh(legGeometry, legMaterial);
+                frontLeftLeg.position.set(-0.2, -0.4, 0.2);
+                frontLeftLeg.castShadow = true;
+                rabbit.add(frontLeftLeg);
+                
+                const frontRightLeg = new THREE.Mesh(legGeometry, legMaterial);
+                frontRightLeg.position.set(0.2, -0.4, 0.2);
+                frontRightLeg.castShadow = true;
+                rabbit.add(frontRightLeg);
+                
+                const backLeftLeg = new THREE.Mesh(legGeometry, legMaterial);
+                backLeftLeg.position.set(-0.2, -0.4, -0.2);
+                backLeftLeg.castShadow = true;
+                rabbit.add(backLeftLeg);
+                
+                const backRightLeg = new THREE.Mesh(legGeometry, legMaterial);
+                backRightLeg.position.set(0.2, -0.4, -0.2);
+                backRightLeg.castShadow = true;
+                rabbit.add(backRightLeg);
+                
+                return rabbit;
+            }
+
+            // Create a turtle using basic geometries
+            function createTurtle() {
+                const turtle = new THREE.Group();
+                
+                // Turtle shell
+                const shellGeometry = new THREE.SphereGeometry(0.5, 16, 16, 0, Math.PI * 2, 0, Math.PI / 2);
+                const shellMaterial = new THREE.MeshPhongMaterial({ color: 0x006400 });
+                const shell = new THREE.Mesh(shellGeometry, shellMaterial);
+                shell.rotation.x = Math.PI / 2;
+                shell.castShadow = true;
+                turtle.add(shell);
+                
+                // Turtle head
+                const headGeometry = new THREE.SphereGeometry(0.2, 16, 16);
+                const headMaterial = new THREE.MeshPhongMaterial({ color: 0x8B4513 });
+                const head = new THREE.Mesh(headGeometry, headMaterial);
+                head.position.set(0, 0, 0.6);
+                head.castShadow = true;
+                turtle.add(head);
+                
+                // Turtle legs
+                const legGeometry = new THREE.CylinderGeometry(0.08, 0.08, 0.3, 12);
+                const legMaterial = new THREE.MeshPhongMaterial({ color: 0x8B4513 });
+                
+                const frontLeftLeg = new THREE.Mesh(legGeometry, legMaterial);
+                frontLeftLeg.position.set(-0.3, 0, 0.3);
+                frontLeftLeg.rotation.x = Math.PI / 2;
+                frontLeftLeg.castShadow = true;
+                turtle.add(frontLeftLeg);
+                
+                const frontRightLeg = new THREE.Mesh(legGeometry, legMaterial);
+                frontRightLeg.position.set(0.3, 0, 0.3);
+                frontRightLeg.rotation.x = Math.PI / 2;
+                frontRightLeg.castShadow = true;
+                turtle.add(frontRightLeg);
+                
+                const backLeftLeg = new THREE.Mesh(legGeometry, legMaterial);
+                backLeftLeg.position.set(-0.3, 0, -0.3);
+                backLeftLeg.rotation.x = Math.PI / 2;
+                backLeftLeg.castShadow = true;
+                turtle.add(backLeftLeg);
+                
+                const backRightLeg = new THREE.Mesh(legGeometry, legMaterial);
+                backRightLeg.position.set(0.3, 0, -0.3);
+                backRightLeg.rotation.x = Math.PI / 2;
+                backRightLeg.castShadow = true;
+                turtle.add(backRightLeg);
+                
+                return turtle;
+            }
+
+            // Create and position the rabbit and turtle
+            const rabbit = createRabbit();
+            rabbit.position.set(-4, 0.5, 0);
+            rabbit.scale.set(0.8, 0.8, 0.8);
+            scene.add(rabbit);
+
+            const turtle = createTurtle();
+            turtle.position.set(-2, 0.3, 0);
+            turtle.scale.set(0.8, 0.8, 0.8);
+            scene.add(turtle);
+
+            // Animation variables
+            let rabbitAngle = 0;
+            let turtleAngle = Math.PI / 4; // Start the turtle at a different position
+            const rabbitSpeed = 0.03;
+            const turtleSpeed = 0.01;
+            let rabbitHop = 0;
+
+            // Handle window resize
+            window.addEventListener('resize', function() {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            });
+
+            // Animation loop
+            function animate() {
+                requestAnimationFrame(animate);
+
+                // Update controls
+                controls.update();
+
+                // Update rabbit position - move faster in a circle
+                rabbitAngle += rabbitSpeed;
+                rabbit.position.x = Math.sin(rabbitAngle) * 6;
+                rabbit.position.z = Math.cos(rabbitAngle) * 6;
+                rabbit.rotation.y = -rabbitAngle - Math.PI / 2;
+                
+                // Make the rabbit hop
+                rabbitHop += 0.1;
+                rabbit.position.y = 0.5 + Math.abs(Math.sin(rabbitHop)) * 0.3;
+
+                // Update turtle position - move slower in a circle
+                turtleAngle += turtleSpeed;
+                turtle.position.x = Math.sin(turtleAngle) * 6;
+                turtle.position.z = Math.cos(turtleAngle) * 6;
+                turtle.rotation.y = -turtleAngle - Math.PI / 2;
+
+                // Render the scene
+                renderer.render(scene, camera);
+            }
+            animate();
+        </script>
+    </body>
+    </html>
+    """
 
 # Main content
 st.title("🎮 AI Three.js Scene Generator")
 st.write("Enter a description and get a 3D scene generated with Three.js")
+
+# Add a fallback for the rabbit and turtle scene
+if st.button("Load Rabbit and Turtle Example"):
+    rabbit_turtle_html = create_rabbit_turtle_scene()
+    rabbit_turtle_scene = {
+        "prompt": "A rabbit and a turtle running on a hill",
+        "html": rabbit_turtle_html,
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    }
+    st.session_state.current_scene = rabbit_turtle_scene
+    add_to_history("A rabbit and a turtle running on a hill", rabbit_turtle_html)
 
 # Input form
 with st.form("scene_generator_form"):
@@ -357,13 +628,14 @@ with st.form("scene_generator_form"):
             html_content, full_response = generate_threejs_code(user_prompt)
             
             if html_content:
-                # Save current scene to state
-                st.session_state.current_scene = {
+                # Save current scene to state with all required fields
+                new_scene = {
                     "prompt": user_prompt,
                     "html": html_content,
                     "full_response": full_response,
                     "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 }
+                st.session_state.current_scene = new_scene
                 
                 # Add to history
                 add_to_history(user_prompt, html_content)
@@ -376,7 +648,18 @@ with st.form("scene_generator_form"):
 if st.session_state.current_scene:
     scene = st.session_state.current_scene
     
-    st.subheader(f"Scene: {scene['prompt']}")
+    # Add validation to ensure all required keys exist
+    if not isinstance(scene, dict):
+        st.error("Invalid scene data structure")
+    elif "prompt" not in scene:
+        st.error("Scene is missing prompt information")
+    elif "html" not in scene:
+        st.error("Scene is missing HTML content")
+        # Try to load a default scene as a fallback
+        scene["html"] = create_test_scene()
+    
+    # Now it's safe to display the scene
+    st.subheader(f"Scene: {scene.get('prompt', 'Unknown')}")
     
     # Render the Three.js scene with sufficient height
     st.components.v1.html(scene["html"], height=600)
