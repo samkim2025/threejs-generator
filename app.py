@@ -1,22 +1,9 @@
 import streamlit as st
-import anthropic
 import os
 import re
 import json
-from dotenv import load_dotenv
-
-# Load environment variables (for local development)
-load_dotenv()
-
-# Get API key (will use secrets in Streamlit Cloud)
-ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY") or st.secrets.get("ANTHROPIC_API_KEY", "")
-
-if not ANTHROPIC_API_KEY:
-    st.error("ANTHROPIC_API_KEY is not set. Please add it to your Streamlit secrets.")
-    st.stop()
-
-# Initialize Anthropic client
-client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+from datetime import datetime
+import httpx
 
 # Set page configuration
 st.set_page_config(
@@ -31,6 +18,22 @@ if "history" not in st.session_state:
     st.session_state.history = []
 if "current_scene" not in st.session_state:
     st.session_state.current_scene = None
+
+# Safer API key handling
+def get_api_key():
+    """Get API key from environment or secrets."""
+    # Try to get from secrets first
+    try:
+        return st.secrets.get("ANTHROPIC_API_KEY", "")
+    except:
+        # Fallback to environment variable
+        return os.getenv("ANTHROPIC_API_KEY", "")
+
+ANTHROPIC_API_KEY = get_api_key()
+
+if not ANTHROPIC_API_KEY:
+    st.error("ANTHROPIC_API_KEY is not set. Please add it to your Streamlit secrets.")
+    st.stop()
 
 def extract_code(response_text):
     """Extract Three.js code from Claude's response."""
@@ -57,8 +60,14 @@ def extract_code(response_text):
     
     return "", ""
 
-def generate_threejs_code(prompt):
-    """Generate Three.js code using Claude API."""
+async def call_claude_api(prompt):
+    """Call Claude API using httpx directly to avoid initialization issues."""
+    headers = {
+        "x-api-key": ANTHROPIC_API_KEY,
+        "content-type": "application/json",
+        "anthropic-version": "2023-06-01"
+    }
+    
     system_prompt = """You are an expert in Three.js, WebGL, and 3D web development. 
     Your task is to create complete, standalone Three.js code based on the user's description.
     
@@ -82,21 +91,45 @@ def generate_threejs_code(prompt):
     - Add error handling for texture and model loading
     """
     
+    data = {
+        "model": "claude-3-opus-20240229",
+        "max_tokens": 4000,
+        "temperature": 0.2,
+        "system": system_prompt,
+        "messages": [
+            {"role": "user", "content": f"Create a Three.js scene with the following description: {prompt}. Make it visually interesting with good lighting and materials."}
+        ]
+    }
+    
     try:
-        response = client.messages.create(
-            model="claude-3-opus-20240229",
-            max_tokens=4000,
-            temperature=0.2,
-            system=system_prompt,
-            messages=[
-                {"role": "user", "content": f"Create a Three.js scene with the following description: {prompt}. Make it visually interesting with good lighting and materials."}
-            ]
-        )
-        code, code_type = extract_code(response.content[0].text)
-        return code, code_type, response.content[0].text
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            response = await client.post("https://api.anthropic.com/v1/messages", json=data, headers=headers)
+            response.raise_for_status()
+            response_data = response.json()
+            
+            if "content" in response_data and len(response_data["content"]) > 0:
+                return response_data["content"][0]["text"]
+            else:
+                return "Error: No content in response"
     except Exception as e:
-        st.error(f"Error generating code: {str(e)}")
-        return "", "", f"Error: {str(e)}"
+        return f"Error calling Claude API: {str(e)}"
+
+def generate_threejs_code(prompt):
+    """Generate Three.js code using Claude API."""
+    try:
+        import asyncio
+        response_text = asyncio.run(call_claude_api(prompt))
+        
+        if response_text.startswith("Error"):
+            st.error(response_text)
+            return "", "", response_text
+        
+        code, code_type = extract_code(response_text)
+        return code, code_type, response_text
+    except Exception as e:
+        error_msg = f"Error generating code: {str(e)}"
+        st.error(error_msg)
+        return "", "", error_msg
 
 def create_html_with_code(threejs_code, code_type):
     """Create complete HTML with the Three.js code."""
@@ -132,10 +165,11 @@ def create_html_with_code(threejs_code, code_type):
 
 def add_to_history(prompt, html_content):
     """Add a generated scene to history."""
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     st.session_state.history.append({
         "prompt": prompt,
         "html": html_content,
-        "timestamp": st.session_state.get("current_timestamp", "")
+        "timestamp": timestamp
     })
 
 def render_threejs_scene(html_content, height=600):
@@ -186,9 +220,8 @@ with st.form("scene_generator_form"):
         submitted = True
     
     if submitted and user_prompt:
-        with st.spinner("Generating your 3D scene..."):
-            import time
-            st.session_state.current_timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+        with st.spinner("Generating your 3D scene... (this may take 30-60 seconds)"):
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             
             code, code_type, full_response = generate_threejs_code(user_prompt)
             
@@ -202,7 +235,7 @@ with st.form("scene_generator_form"):
                     "code": code,
                     "code_type": code_type,
                     "full_response": full_response,
-                    "timestamp": st.session_state.current_timestamp
+                    "timestamp": timestamp
                 }
                 
                 # Add to history
