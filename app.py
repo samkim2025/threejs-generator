@@ -1,5 +1,9 @@
 import streamlit as st
 import os
+import re
+import json
+import httpx
+import asyncio
 from datetime import datetime
 
 # Page configuration
@@ -10,10 +14,14 @@ st.set_page_config(
 )
 
 # Initialize session state
+if "history" not in st.session_state:
+    st.session_state.history = []
 if "current_scene" not in st.session_state:
     st.session_state.current_scene = None
+if "debug_info" not in st.session_state:
+    st.session_state.debug_info = {}
 
-# Pre-built scenes
+# Pre-built scenes (keeping the existing code)
 def get_rabbit_turtle_scene():
     return """
     <!DOCTYPE html>
@@ -770,32 +778,256 @@ def get_forest_scene():
     </html>
     """
 
-# Main app layout
+# Get API key (using environment variable rather than secrets for simplicity)
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+
+# Direct approach to API call with better debugging
+async def call_anthropic_api(prompt):
+    try:
+        headers = {
+            "x-api-key": ANTHROPIC_API_KEY,
+            "content-type": "application/json",
+            "anthropic-version": "2023-06-01"
+        }
+        
+        # Simplified system prompt focused on what works
+        system_prompt = """You are an expert in Three.js. Create a complete, standalone HTML file with a Three.js scene based on the user's description. 
+        
+        Include:
+        1. All necessary Three.js imports from the CDN (use version 0.137.0 from unpkg)
+        2. A complete HTML structure
+        3. Scene, camera, renderer setup
+        4. OrbitControls for user interaction
+        5. Appropriate lighting
+        6. The 3D objects described by the user
+        7. Animation using requestAnimationFrame
+        8. Proper window resize handling
+        
+        Make sure the scene has:
+        - Shadow rendering
+        - Interactive camera controls
+        - Attractive materials and lighting
+        - Animation where appropriate
+        
+        Do not use any external assets or textures that require loading.
+        Create all geometries using Three.js built-in shapes."""
+        
+        data = {
+            "model": "claude-3-opus-20240229",
+            "max_tokens": 4000,
+            "temperature": 0.2,
+            "system": system_prompt,
+            "messages": [
+                {"role": "user", "content": f"Create a complete Three.js scene with: {prompt}. Return ONLY the complete HTML file with no explanations before or after the code."}
+            ]
+        }
+        
+        # Store request data for debugging
+        debug_info = {
+            "request": data,
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        }
+        
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            response = await client.post(
+                "https://api.anthropic.com/v1/messages",
+                json=data,
+                headers=headers
+            )
+            
+            # Store raw response for debugging
+            debug_info["status_code"] = response.status_code
+            debug_info["response_headers"] = dict(response.headers)
+            
+            if response.status_code != 200:
+                debug_info["error"] = f"API error: {response.status_code} - {response.text}"
+                return None, debug_info
+            
+            response_data = response.json()
+            debug_info["response"] = response_data
+            
+            if "content" in response_data and len(response_data["content"]) > 0:
+                response_text = response_data["content"][0]["text"]
+                return response_text, debug_info
+            else:
+                debug_info["error"] = "No content in response"
+                return None, debug_info
+    
+    except Exception as e:
+        debug_info = {
+            "error": f"Exception: {str(e)}",
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        }
+        return None, debug_info
+
+# Improved code extraction
+def extract_html_from_response(response_text):
+    # First, try to find complete HTML document using standard markers
+    html_pattern = r"<!DOCTYPE html>[\s\S]*?<\/html>"
+    html_matches = re.search(html_pattern, response_text, re.IGNORECASE)
+    
+    if html_matches:
+        return html_matches.group(0)
+    
+    # If no complete document found, try to find HTML within code blocks
+    code_block_pattern = r"```(?:html)?([\s\S]*?)```"
+    code_matches = re.search(code_block_pattern, response_text)
+    
+    if code_matches:
+        code = code_matches.group(1).strip()
+        
+        # Check if the extracted code already contains HTML structure
+        if code.strip().startswith("<!DOCTYPE") or code.strip().startswith("<html"):
+            return code
+        
+        # Otherwise wrap it with HTML structure
+        return f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <title>Generated Three.js Scene</title>
+            <style>
+                body {{ margin: 0; overflow: hidden; }}
+                #info {{
+                    position: absolute;
+                    top: 10px;
+                    width: 100%;
+                    text-align: center;
+                    color: white;
+                    font-family: Arial, sans-serif;
+                    pointer-events: none;
+                    text-shadow: 1px 1px 1px black;
+                }}
+            </style>
+        </head>
+        <body>
+            <div id="info">Generated Three.js Scene - Use mouse to navigate</div>
+            <script src="https://unpkg.com/three@0.137.0/build/three.min.js"></script>
+            <script src="https://unpkg.com/three@0.137.0/examples/js/controls/OrbitControls.js"></script>
+            {code}
+        </body>
+        </html>
+        """
+    
+    # If all else fails, consider the entire response as JS code and wrap it
+    return f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <title>Generated Three.js Scene</title>
+        <style>
+            body {{ margin: 0; overflow: hidden; }}
+            #info {{
+                position: absolute;
+                top: 10px;
+                width: 100%;
+                text-align: center;
+                color: white;
+                font-family: Arial, sans-serif;
+                pointer-events: none;
+                text-shadow: 1px 1px 1px black;
+            }}
+        </style>
+    </head>
+    <body>
+        <div id="info">Generated Three.js Scene - Use mouse to navigate</div>
+        <script src="https://unpkg.com/three@0.137.0/build/three.min.js"></script>
+        <script src="https://unpkg.com/three@0.137.0/examples/js/controls/OrbitControls.js"></script>
+        <script>
+        {response_text}
+        </script>
+    </body>
+    </html>
+    """
+
+def get_custom_scene(prompt):
+    # Use async function to call API
+    response_text, debug_info = asyncio.run(call_anthropic_api(prompt))
+    
+    # Store debug info in session state
+    st.session_state.debug_info = debug_info
+    
+    if response_text:
+        # Extract HTML from response
+        html_content = extract_html_from_response(response_text)
+        return html_content, response_text
+    else:
+        return None, None
+
+# Main app
 st.title("🎮 Three.js Scene Generator")
-st.write("Select a pre-built scene from the options below:")
 
-# Scene selection
-scene_options = {
-    "Rabbit & Turtle": get_rabbit_turtle_scene,
-    "Solar System": get_solar_system_scene,
-    "Forest Scene": get_forest_scene
-}
+# Create tabs for preset and custom scenes
+tab1, tab2, tab3 = st.tabs(["Preset Scenes", "Custom Scene Generator", "Debug Info"])
 
-selected_scene = st.selectbox(
-    "Choose a scene:",
-    list(scene_options.keys())
-)
-
-# Display the selected scene
-if st.button("Load Scene"):
-    scene_html = scene_options[selected_scene]()
-    st.session_state.current_scene = {
-        "prompt": selected_scene,
-        "html": scene_html
+with tab1:
+    st.subheader("Select a Pre-built Scene")
+    
+    preset_options = {
+        "Rabbit & Turtle": get_rabbit_turtle_scene,
+        "Solar System": get_solar_system_scene,
+        "Forest Scene": get_forest_scene
     }
-    st.success(f"Loaded {selected_scene} scene!")
+    
+    selected_preset = st.selectbox(
+        "Choose a scene:",
+        list(preset_options.keys())
+    )
+    
+    if st.button("Load Preset Scene", key="load_preset"):
+        scene_html = preset_options[selected_preset]()
+        st.session_state.current_scene = {
+            "prompt": selected_preset,
+            "html": scene_html,
+            "is_preset": True
+        }
+        st.success(f"Loaded {selected_preset} scene!")
 
-# Display current scene
+with tab2:
+    st.subheader("Generate Custom Scene")
+    
+    with st.form("custom_scene_form"):
+        user_prompt = st.text_area(
+            "Describe your 3D scene:",
+            placeholder="A futuristic city with neon buildings and flying vehicles",
+            height=100
+        )
+        
+        submitted = st.form_submit_button("Generate Custom Scene")
+        
+        if submitted and user_prompt:
+            with st.spinner("Generating your 3D scene... (this may take up to a minute)"):
+                # Call API to generate scene
+                html_content, full_response = get_custom_scene(user_prompt)
+                
+                if html_content:
+                    # Save current scene to state
+                    st.session_state.current_scene = {
+                        "prompt": user_prompt,
+                        "html": html_content, 
+                        "full_response": full_response,
+                        "is_preset": False
+                    }
+                    st.success("Scene generated successfully!")
+                else:
+                    st.error("Failed to generate scene. See Debug tab for details.")
+
+with tab3:
+    st.subheader("Debug Information")
+    
+    if "debug_info" in st.session_state and st.session_state.debug_info:
+        debug_info = st.session_state.debug_info
+        
+        st.json(debug_info)
+        
+        if "error" in debug_info:
+            st.error(f"Error: {debug_info['error']}")
+    else:
+        st.info("No debug information available yet. Generate a custom scene to see debug data.")
+
+# Display current scene if available
 if st.session_state.current_scene:
     scene = st.session_state.current_scene
     
@@ -804,31 +1036,40 @@ if st.session_state.current_scene:
     # Render the Three.js scene
     st.components.v1.html(scene["html"], height=600)
     
-    # Show HTML code
+    # Show HTML code and download button
     with st.expander("View HTML Code"):
         st.code(scene["html"], language="html")
-        
-    # Download button
+    
     st.download_button(
         label="Download HTML",
         data=scene["html"],
         file_name="threejs_scene.html",
         mime="text/html"
     )
+    
+    # Show full response for custom scenes
+    if not scene.get("is_preset", False) and "full_response" in scene:
+        with st.expander("View Full API Response"):
+            st.text_area("Response", scene["full_response"], height=200)
 
 st.markdown("---")
 st.markdown("""
 ### Instructions
 
-1. **Select a scene** from the dropdown menu
-2. Click **Load Scene** to display it
-3. **Interact** with the scene using your mouse:
+1. **Preset Scenes**: Choose from pre-built scenes in the first tab
+2. **Custom Scenes**: Describe your own scene in the second tab
+3. **Debug Info**: View API request/response details in the third tab
+4. **Interact** with any scene using your mouse:
    - Left-click + drag: Rotate the camera
    - Right-click + drag: Pan the camera
    - Scroll: Zoom in/out
-4. Click **Download HTML** to save the scene for offline viewing
+5. **Download**: Save the HTML to open in your browser
 
-### Note
+### Troubleshooting
 
-This simplified version uses pre-built scenes instead of generating new ones through an API.
+If custom scene generation fails:
+1. Check the Debug tab for API response details
+2. Try a simpler description
+3. Make sure your API key is correct in the environment variable
+4. Download the HTML to run locally for best performance
 """)
