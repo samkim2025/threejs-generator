@@ -1,3 +1,18 @@
+import streamlit as st
+
+# Set page config
+st.set_page_config(
+    page_title="Three.js Scene Generator",
+    layout="wide",
+    initial_sidebar_state="collapsed"
+)
+
+# Title
+st.title("Three.js Scene Generator")
+st.markdown("Generate 3D scenes using Three.js")
+
+# HTML content for Three.js app
+html_content = """
 <!DOCTYPE html>
 <html>
 <head>
@@ -554,3 +569,7 @@
     </script>
 </body>
 </html>
+"""
+
+# Render the HTML content
+st.components.v1.html(html_content, height=800)
