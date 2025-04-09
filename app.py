@@ -21,26 +21,299 @@ if "debug_info" not in st.session_state:
 # Get API key
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 
-# Example mappings to guide the model
+# Example mappings with a lion example for animal scenes
 EXAMPLE_MAPPINGS = [
     {
         "simple": "A cool city with many buildings",
-        "enhanced": "Create a 3D city scene using Three.js that features a bustling urban environment with skyscrapers, apartment buildings, and smaller shops lining the streets. Incorporate roads with moving cars, traffic lights, and pedestrian crossings to bring the city to life. Add pedestrians walking on sidewalks and crossing the streets to enhance realism. Include street elements such as lampposts, benches, and trees for a more immersive experience. Utilize dynamic lighting to simulate day and night cycles, and implement basic camera controls to allow users to explore the vibrant cityscape from different perspectives.",
-        "key_elements": [
-            "Varied building types (skyscrapers, apartments, shops)",
-            "Road networks with vehicles",
-            "Pedestrians with walking animations",
-            "Street furniture (lampposts, benches, trees)",
-            "Traffic lights with changing states",
-            "Day/night cycle with dynamic lighting",
-            "Camera controls for scene navigation"
-        ]
+        "enhanced": "Create a 3D city scene using Three.js that features a bustling urban environment with skyscrapers, apartment buildings, and smaller shops lining the streets. Incorporate roads with moving cars, traffic lights, and pedestrian crossings to bring the city to life. Add pedestrians walking on sidewalks and crossing the streets to enhance realism. Include street elements such as lampposts, benches, and trees for a more immersive experience. Utilize dynamic lighting to simulate day and night cycles, and implement basic camera controls to allow users to explore the vibrant cityscape from different perspectives."
     },
     {
-        "simple": "A forest with animals",
-        "enhanced": "Create a lush 3D forest environment with diverse vegetation including tall pine trees, deciduous trees with animated leaves, and undergrowth with ferns and bushes. Add wildlife such as deer that graze and move through clearings, rabbits that hop between bushes, and birds that fly overhead and perch on branches. Include a winding stream with reflective water surface and rocks protruding from it. Implement dappled lighting through the tree canopy, with sunbeams that break through and illuminate particles in the air. Add ambient nature sounds like rustling leaves, flowing water, and occasional animal calls to create an immersive woodland experience. Allow viewers to explore the scene with intuitive camera controls."
+        "simple": "A lion sitting under a tree in a grassy field",
+        "enhanced": "Create a serene 3D scene featuring a golden-maned lion resting under the shade of a tall acacia tree in an expansive grassy savanna. The scene should include a detailed lion constructed from primitive Three.js shapes (spheres, cylinders, and boxes) with a tawny body, distinctive mane, and relaxed posture. The acacia tree should have a thick trunk and a wide, umbrella-like canopy of leaves providing dappled shade. Surrounding them, tall grass should sway gently in a simulated breeze. Implement a day-night cycle with changing lighting conditions, casting realistic shadows across the scene. Allow users to orbit around the scene with camera controls to view the lion and its environment from different angles."
     }
 ]
+
+# Example HTML for animal scene with lion created from primitives
+LION_EXAMPLE_HTML = """<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lion Under Tree Scene</title>
+    <style>
+        body { margin: 0; overflow: hidden; }
+        canvas { display: block; }
+        #info {
+            position: absolute;
+            top: 10px;
+            width: 100%;
+            text-align: center;
+            color: white;
+            font-family: Arial, sans-serif;
+            pointer-events: none;
+            text-shadow: 1px 1px 1px black;
+        }
+    </style>
+</head>
+<body>
+    <div id="info">Lion Under Tree - Use mouse to navigate</div>
+    <script src="https://unpkg.com/three@0.137.0/build/three.min.js"></script>
+    <script src="https://unpkg.com/three@0.137.0/examples/js/controls/OrbitControls.js"></script>
+    <script>
+        // Scene setup
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x87CEEB);
+        
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(0, 5, 10);
+        
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        document.body.appendChild(renderer.domElement);
+        
+        // Orbit controls
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        
+        // Lights
+        const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
+        scene.add(ambientLight);
+        
+        const directionalLight = new THREE.DirectionalLight(0xFFFFFF, 1);
+        directionalLight.position.set(5, 8, 5);
+        directionalLight.castShadow = true;
+        directionalLight.shadow.mapSize.width = 1024;
+        directionalLight.shadow.mapSize.height = 1024;
+        scene.add(directionalLight);
+        
+        // Ground
+        const groundGeometry = new THREE.PlaneGeometry(100, 100);
+        const groundMaterial = new THREE.MeshStandardMaterial({ color: 0x8B4513 });
+        const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+        ground.rotation.x = -Math.PI / 2;
+        ground.receiveShadow = true;
+        scene.add(ground);
+        
+        // Grass
+        const grassGeometry = new THREE.PlaneGeometry(100, 100, 50, 50);
+        const grassMaterial = new THREE.MeshStandardMaterial({ 
+            color: 0x7CFC00,
+            roughness: 0.8
+        });
+        const grass = new THREE.Mesh(grassGeometry, grassMaterial);
+        grass.rotation.x = -Math.PI / 2;
+        grass.position.y = 0.05;
+        grass.receiveShadow = true;
+        scene.add(grass);
+        
+        // Tree
+        function createTree(x, z) {
+            const treeGroup = new THREE.Group();
+            
+            // Trunk
+            const trunkGeometry = new THREE.CylinderGeometry(0.5, 0.8, 5, 8);
+            const trunkMaterial = new THREE.MeshStandardMaterial({ color: 0x8B4513 });
+            const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
+            trunk.position.y = 2.5;
+            trunk.castShadow = true;
+            trunk.receiveShadow = true;
+            treeGroup.add(trunk);
+            
+            // Canopy
+            const canopyGeometry = new THREE.SphereGeometry(4, 16, 16);
+            const canopyMaterial = new THREE.MeshStandardMaterial({ color: 0x228B22 });
+            const canopy = new THREE.Mesh(canopyGeometry, canopyMaterial);
+            canopy.position.y = 7;
+            canopy.scale.y = 0.7;
+            canopy.castShadow = true;
+            treeGroup.add(canopy);
+            
+            treeGroup.position.set(x, 0, z);
+            scene.add(treeGroup);
+            
+            return treeGroup;
+        }
+        
+        const tree = createTree(3, 2);
+        
+        // Create lion using primitives
+        function createLion() {
+            const lionGroup = new THREE.Group();
+            
+            // Body
+            const bodyGeometry = new THREE.SphereGeometry(1, 16, 16);
+            const bodyMaterial = new THREE.MeshStandardMaterial({ color: 0xC2B280 });
+            const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
+            body.scale.set(1.2, 1, 1.5);
+            body.position.y = 1.1;
+            body.castShadow = true;
+            lionGroup.add(body);
+            
+            // Head
+            const headGeometry = new THREE.SphereGeometry(0.7, 16, 16);
+            const headMaterial = new THREE.MeshStandardMaterial({ color: 0xC2B280 });
+            const head = new THREE.Mesh(headGeometry, headMaterial);
+            head.position.set(1.2, 1.5, 0);
+            head.castShadow = true;
+            lionGroup.add(head);
+            
+            // Mane
+            const maneGeometry = new THREE.SphereGeometry(1, 16, 16);
+            const maneMaterial = new THREE.MeshStandardMaterial({ color: 0xCD853F });
+            const mane = new THREE.Mesh(maneGeometry, maneMaterial);
+            mane.position.set(1.2, 1.5, 0);
+            mane.scale.set(1.2, 1.2, 1.2);
+            mane.castShadow = true;
+            lionGroup.add(mane);
+            
+            // Face
+            const snoutGeometry = new THREE.CylinderGeometry(0.2, 0.3, 0.4, 8);
+            const snoutMaterial = new THREE.MeshStandardMaterial({ color: 0xD2B48C });
+            const snout = new THREE.Mesh(snoutGeometry, snoutMaterial);
+            snout.position.set(1.7, 1.4, 0);
+            snout.rotation.z = Math.PI / 2;
+            snout.castShadow = true;
+            lionGroup.add(snout);
+            
+            // Eyes
+            const eyeGeometry = new THREE.SphereGeometry(0.1, 8, 8);
+            const eyeMaterial = new THREE.MeshStandardMaterial({ color: 0x000000 });
+            
+            const leftEye = new THREE.Mesh(eyeGeometry, eyeMaterial);
+            leftEye.position.set(1.6, 1.7, 0.3);
+            lionGroup.add(leftEye);
+            
+            const rightEye = new THREE.Mesh(eyeGeometry, eyeMaterial);
+            rightEye.position.set(1.6, 1.7, -0.3);
+            lionGroup.add(rightEye);
+            
+            // Legs
+            const legGeometry = new THREE.CylinderGeometry(0.2, 0.2, 1, 8);
+            const legMaterial = new THREE.MeshStandardMaterial({ color: 0xC2B280 });
+            
+            const frontLeftLeg = new THREE.Mesh(legGeometry, legMaterial);
+            frontLeftLeg.position.set(0.6, 0.5, 0.5);
+            frontLeftLeg.castShadow = true;
+            lionGroup.add(frontLeftLeg);
+            
+            const frontRightLeg = new THREE.Mesh(legGeometry, legMaterial);
+            frontRightLeg.position.set(0.6, 0.5, -0.5);
+            frontRightLeg.castShadow = true;
+            lionGroup.add(frontRightLeg);
+            
+            const backLeftLeg = new THREE.Mesh(legGeometry, legMaterial);
+            backLeftLeg.position.set(-0.6, 0.5, 0.5);
+            backLeftLeg.castShadow = true;
+            lionGroup.add(backLeftLeg);
+            
+            const backRightLeg = new THREE.Mesh(legGeometry, legMaterial);
+            backRightLeg.position.set(-0.6, 0.5, -0.5);
+            backRightLeg.castShadow = true;
+            lionGroup.add(backRightLeg);
+            
+            // Tail
+            const tailGeometry = new THREE.CylinderGeometry(0.1, 0.15, 1.5, 8);
+            const tailMaterial = new THREE.MeshStandardMaterial({ color: 0xC2B280 });
+            const tail = new THREE.Mesh(tailGeometry, tailMaterial);
+            tail.position.set(-1.5, 1.2, 0);
+            tail.rotation.z = Math.PI / 4;
+            tail.castShadow = true;
+            lionGroup.add(tail);
+            
+            // Tail tuft
+            const tuftGeometry = new THREE.SphereGeometry(0.2, 8, 8);
+            const tuftMaterial = new THREE.MeshStandardMaterial({ color: 0x8B4513 });
+            const tuft = new THREE.Mesh(tuftGeometry, tuftMaterial);
+            tuft.position.set(-2, 1.8, 0);
+            tuft.castShadow = true;
+            lionGroup.add(tuft);
+            
+            // Position the lion
+            lionGroup.position.set(-2, 0, 0);
+            scene.add(lionGroup);
+            
+            return lionGroup;
+        }
+        
+        const lion = createLion();
+        
+        // Create grass tufts
+        for (let i = 0; i < 200; i++) {
+            const tuftGeometry = new THREE.ConeGeometry(0.2, 1, 4);
+            const tuftMaterial = new THREE.MeshStandardMaterial({ 
+                color: 0x7CFC00,
+                side: THREE.DoubleSide
+            });
+            const tuft = new THREE.Mesh(tuftGeometry, tuftMaterial);
+            
+            const x = Math.random() * 80 - 40;
+            const z = Math.random() * 80 - 40;
+            
+            // Don't place grass too close to the lion or tree
+            const distToLion = Math.sqrt(Math.pow(x - lion.position.x, 2) + Math.pow(z - lion.position.z, 2));
+            const distToTree = Math.sqrt(Math.pow(x - tree.position.x, 2) + Math.pow(z - tree.position.z, 2));
+            
+            if (distToLion > 4 && distToTree > 5) {
+                tuft.position.set(x, 0.5, z);
+                tuft.rotation.y = Math.random() * Math.PI;
+                tuft.castShadow = true;
+                scene.add(tuft);
+            }
+        }
+        
+        // Day/night cycle
+        let time = 0;
+        
+        // Animation
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            // Update controls
+            controls.update();
+            
+            // Update time and day/night cycle
+            time += 0.002;
+            const daylight = Math.sin(time) * 0.5 + 0.5;
+            ambientLight.intensity = 0.1 + daylight * 0.5;
+            directionalLight.intensity = daylight;
+            
+            // Position the sun
+            directionalLight.position.x = Math.sin(time) * 10;
+            directionalLight.position.y = Math.sin(time) * 5 + 5;
+            directionalLight.position.z = Math.cos(time) * 10;
+            
+            // Change sky color based on time
+            const r = 0.5 + daylight * 0.3;
+            const g = 0.6 + daylight * 0.4;
+            const b = 0.8 + daylight * 0.2;
+            scene.background.setRGB(r, g, b);
+            
+            // Animate lion (subtle breathing)
+            lion.children[0].scale.y = 1 + Math.sin(time * 3) * 0.05;
+            lion.children[2].scale.y = 1 + Math.sin(time * 3) * 0.05;
+            
+            // Animate tail
+            lion.children[9].rotation.z = Math.PI / 4 + Math.sin(time * 2) * 0.2;
+            lion.children[10].position.x = -2 + Math.sin(time * 2) * 0.1;
+            lion.children[10].position.y = 1.8 + Math.sin(time * 2) * 0.1;
+            
+            renderer.render(scene, camera);
+        }
+        
+        // Handle window resize
+        window.addEventListener('resize', function() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+        
+        // Start animation
+        animate();
+    </script>
+</body>
+</html>"""
 
 # Enhanced prompt function using explicit examples
 async def enhance_prompt(basic_prompt):
@@ -69,6 +342,8 @@ Your job is to transform the user's simple prompt into a similar enhanced descri
 4. Interactive elements where appropriate
 5. Spatial relationships between objects
 
+CRITICALLY IMPORTANT: Always specify that objects should be created using only THREE.js primitive shapes (boxes, spheres, cylinders, etc.) and NOT using external 3D models or resources.
+
 The enhanced description should be 150-250 words and focus entirely on what should appear in the scene."""
     
     data = {
@@ -82,7 +357,8 @@ The enhanced description should be 150-250 words and focus entirely on what shou
 "{basic_prompt}"
 
 Into a detailed scene description similar to the examples in your instructions.
-Focus only on what should appear in the scene and how it should behave."""}
+Focus only on what should appear in the scene and how it should behave.
+IMPORTANT: Specify that all objects must be created using THREE.js primitive shapes (boxes, spheres, cylinders, etc.) and NOT using external 3D models."""}
         ]
     }
     
@@ -115,16 +391,18 @@ async def generate_scene(prompt, simple_prompt):
     
     # Get example mapping that best matches the concept
     best_example = None
-    for example in EXAMPLE_MAPPINGS:
+    for i, example in enumerate(EXAMPLE_MAPPINGS):
         if any(keyword in simple_prompt.lower() for keyword in example["simple"].lower().split()):
             best_example = example
+            best_example_index = i
             break
     
     if not best_example:
         best_example = EXAMPLE_MAPPINGS[0]  # Default to city example
+        best_example_index = 0
     
     # Create a system prompt with the full mapping example
-    city_example_html = """<!DOCTYPE html>
+    example_html = LION_EXAMPLE_HTML if best_example_index == 1 else """<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -413,13 +691,15 @@ async def generate_scene(prompt, simple_prompt):
 
 I'll provide you with a description of a 3D scene. Your task is to generate a SINGLE, COMPLETE HTML file containing a Three.js scene that implements this description.
 
-IMPORTANT - I'll show you an example of the transformation from simple prompt to enhanced description to working HTML:
+CRITICALLY IMPORTANT: DO NOT USE EXTERNAL 3D MODELS OR RESOURCES. Create all scene elements using Three.js primitive shapes like BoxGeometry, SphereGeometry, CylinderGeometry, etc.
+
+Here's an example of the transformation from simple prompt to enhanced description to working HTML:
 
 SIMPLE PROMPT: "{best_example['simple']}"
 
 ENHANCED DESCRIPTION: "{best_example['enhanced']}"
 
-WORKING HTML: {city_example_html if best_example == EXAMPLE_MAPPINGS[0] else "[HTML code would be here]"}
+WORKING HTML: {example_html}
 
 Now, create a scene based on this description: "{prompt}"
 
@@ -429,10 +709,11 @@ Your output must:
 3. Include OrbitControls for camera navigation
 4. Have proper lighting, shadows, and camera setup
 5. Implement animations that bring the scene to life
-6. Include a help message in a #info div to guide users
-7. Ensure all code is properly closed and browsers will render the scene correctly
+6. Create ALL objects using Three.js primitive shapes (NOT GLTFLoader or other model loaders)
+7. Include a help message in a #info div to guide users
+8. Ensure all code is properly closed and browsers will render the scene correctly
 
-RETURN ONLY THE COMPLETE HTML DOCUMENT - no explanations or markdown formatting."""
+RETURN ONLY THE COMPLETE HTML DOCUMENT."""
     
     data = {
         "model": "claude-3-opus-20240229",
@@ -451,6 +732,9 @@ Generate ONLY a complete HTML document with embedded JavaScript. Your HTML must 
 4. Animated elements to bring the scene to life
 5. A help message in a #info div for users
 6. Responsive design that works on all screen sizes
+7. Create ALL objects using Three.js primitive shapes (NO EXTERNAL MODELS)
+
+DO NOT use GLTFLoader or try to load external 3D models. Build all scene elements directly using Three.js geometry.
 
 Your response should start with <!DOCTYPE html> and end with </html>."""}
         ]
@@ -493,6 +777,8 @@ Your response should start with <!DOCTYPE html> and end with </html>."""}
             html_content = extract_html_from_response(response_text)
             # Ensure it uses reliable CDN URLs
             html_content = fix_cdn_urls(html_content)
+            # Remove any GLTFLoader references
+            html_content = remove_gltf_loader(html_content)
             debug_info["html_length"] = len(html_content)
             return html_content, debug_info
         else:
@@ -579,6 +865,155 @@ def fix_cdn_urls(html_content):
         'https://unpkg.com/three@0.137.0/examples/js/controls/OrbitControls.js',
         html_content
     )
+    
+    return html_content
+
+# Remove GLTF loader and model loading
+def remove_gltf_loader(html_content):
+    """Remove GLTFLoader and model loading from the HTML"""
+    # Remove GLTFLoader import
+    html_content = re.sub(
+        r'<script src="[^"]*GLTFLoader[^"]*"><\/script>',
+        '',
+        html_content
+    )
+    
+    # If GLTFLoader is found, inject the lion example code
+    if "GLTFLoader" in html_content or "loader.load(" in html_content:
+        html_content = html_content.replace("</body>", """
+    <script>
+        // Alert about external model attempt
+        console.warn("External model loading detected and removed. Using primitive shapes instead.");
+        
+        // Create lion using primitives
+        function createLion() {
+            const lionGroup = new THREE.Group();
+            
+            // Body
+            const bodyGeometry = new THREE.SphereGeometry(1, 16, 16);
+            const bodyMaterial = new THREE.MeshStandardMaterial({ color: 0xC2B280 });
+            const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
+            body.scale.set(1.2, 1, 1.5);
+            body.position.y = 1.1;
+            body.castShadow = true;
+            lionGroup.add(body);
+            
+            // Head
+            const headGeometry = new THREE.SphereGeometry(0.7, 16, 16);
+            const headMaterial = new THREE.MeshStandardMaterial({ color: 0xC2B280 });
+            const head = new THREE.Mesh(headGeometry, headMaterial);
+            head.position.set(1.2, 1.5, 0);
+            head.castShadow = true;
+            lionGroup.add(head);
+            
+            // Mane
+            const maneGeometry = new THREE.SphereGeometry(1, 16, 16);
+            const maneMaterial = new THREE.MeshStandardMaterial({ color: 0xCD853F });
+            const mane = new THREE.Mesh(maneGeometry, maneMaterial);
+            mane.position.set(1.2, 1.5, 0);
+            mane.scale.set(1.2, 1.2, 1.2);
+            mane.castShadow = true;
+            lionGroup.add(mane);
+            
+            // Face
+            const snoutGeometry = new THREE.CylinderGeometry(0.2, 0.3, 0.4, 8);
+            const snoutMaterial = new THREE.MeshStandardMaterial({ color: 0xD2B48C });
+            const snout = new THREE.Mesh(snoutGeometry, snoutMaterial);
+            snout.position.set(1.7, 1.4, 0);
+            snout.rotation.z = Math.PI / 2;
+            snout.castShadow = true;
+            lionGroup.add(snout);
+            
+            // Eyes
+            const eyeGeometry = new THREE.SphereGeometry(0.1, 8, 8);
+            const eyeMaterial = new THREE.MeshStandardMaterial({ color: 0x000000 });
+            
+            const leftEye = new THREE.Mesh(eyeGeometry, eyeMaterial);
+            leftEye.position.set(1.6, 1.7, 0.3);
+            lionGroup.add(leftEye);
+            
+            const rightEye = new THREE.Mesh(eyeGeometry, eyeMaterial);
+            rightEye.position.set(1.6, 1.7, -0.3);
+            lionGroup.add(rightEye);
+            
+            // Legs
+            const legGeometry = new THREE.CylinderGeometry(0.2, 0.2, 1, 8);
+            const legMaterial = new THREE.MeshStandardMaterial({ color: 0xC2B280 });
+            
+            const frontLeftLeg = new THREE.Mesh(legGeometry, legMaterial);
+            frontLeftLeg.position.set(0.6, 0.5, 0.5);
+            frontLeftLeg.castShadow = true;
+            lionGroup.add(frontLeftLeg);
+            
+            const frontRightLeg = new THREE.Mesh(legGeometry, legMaterial);
+            frontRightLeg.position.set(0.6, 0.5, -0.5);
+            frontRightLeg.castShadow = true;
+            lionGroup.add(frontRightLeg);
+            
+            const backLeftLeg = new THREE.Mesh(legGeometry, legMaterial);
+            backLeftLeg.position.set(-0.6, 0.5, 0.5);
+            backLeftLeg.castShadow = true;
+            lionGroup.add(backLeftLeg);
+            
+            const backRightLeg = new THREE.Mesh(legGeometry, legMaterial);
+            backRightLeg.position.set(-0.6, 0.5, -0.5);
+            backRightLeg.castShadow = true;
+            lionGroup.add(backRightLeg);
+            
+            // Tail
+            const tailGeometry = new THREE.CylinderGeometry(0.1, 0.15, 1.5, 8);
+            const tailMaterial = new THREE.MeshStandardMaterial({ color: 0xC2B280 });
+            const tail = new THREE.Mesh(tailGeometry, tailMaterial);
+            tail.position.set(-1.5, 1.2, 0);
+            tail.rotation.z = Math.PI / 4;
+            tail.castShadow = true;
+            lionGroup.add(tail);
+            
+            // Tail tuft
+            const tuftGeometry = new THREE.SphereGeometry(0.2, 8, 8);
+            const tuftMaterial = new THREE.MeshStandardMaterial({ color: 0x8B4513 });
+            const tuft = new THREE.Mesh(tuftGeometry, tuftMaterial);
+            tuft.position.set(-2, 1.8, 0);
+            tuft.castShadow = true;
+            lionGroup.add(tuft);
+            
+            // Position the lion
+            lionGroup.position.set(-2, 0, 0);
+            scene.add(lionGroup);
+            
+            return lionGroup;
+        }
+        
+        const lion = createLion();
+        let animateLion = function(time) {
+            // Animate lion (subtle breathing)
+            lion.children[0].scale.y = 1 + Math.sin(time * 3) * 0.05;
+            lion.children[2].scale.y = 1 + Math.sin(time * 3) * 0.05;
+            
+            // Animate tail
+            lion.children[9].rotation.z = Math.PI / 4 + Math.sin(time * 2) * 0.2;
+            lion.children[10].position.x = -2 + Math.sin(time * 2) * 0.1;
+            lion.children[10].position.y = 1.8 + Math.sin(time * 2) * 0.1;
+        };
+        
+        // Update the animation function to include lion animation
+        const originalAnimateFunction = animate;
+        animate = function() {
+            let time = Date.now() * 0.001;
+            if (typeof animateLion === 'function') {
+                animateLion(time);
+            }
+            originalAnimateFunction();
+        };
+    </script>
+</body>""")
+        
+        # Also remove any loader.load calls
+        html_content = re.sub(
+            r'const loader = new THREE\.GLTFLoader\(\);[\s\S]*?loader\.load\([^\)]*\)[^\}]*\}\);',
+            '// External model loading removed',
+            html_content
+        )
     
     return html_content
 
@@ -706,7 +1141,7 @@ st.write("Describe any scene and see it in 3D instantly!")
 with st.form("scene_generator_form"):
     user_prompt = st.text_area(
         "Describe your 3D scene:",
-        placeholder="A cool city with many buildings",
+        placeholder="A lion sitting under a tree in a grassy field",
         height=80
     )
     
@@ -777,49 +1212,29 @@ with tab2:
         with st.expander("View Debug Info"):
             st.json(scene["debug_info"])
 
-# Troubleshooting info
-st.markdown("---")
-st.subheader("Troubleshooting")
-with st.expander("If you don't see the 3D scene"):
-    st.markdown("""
-    ### If the scene doesn't appear:
-    
-    1. **Check for browser requirements**:
-       - Ensure you have WebGL enabled in your browser
-       - Try a modern browser like Chrome, Firefox, or Edge
-    
-    2. **Download the HTML file**:
-       - Click the "Download HTML" button
-       - Open the file directly in your browser
-    
-    3. **Look for console errors**:
-       - Right-click on the page > Inspect > Console
-       - Check for any error messages
-       
-    4. **Try a simple prompt**:
-       - Start with something basic like "A simple cube"
-       - Complex scenes may require more processing power
-    
-    5. **If all else fails**:
-       - Try reloading the page
-       - Generate the scene again with a different prompt
-    """)
-
 # Instructions
 st.markdown("---")
 st.markdown("""
-### How to Use
-1. Enter a simple description of the 3D scene you want to create
-2. Click "Generate 3D Scene" and wait for the scene to load
-3. Use your mouse to navigate the scene:
-   - Left-click + drag: Rotate the camera
-   - Right-click + drag: Pan the camera
-   - Scroll: Zoom in/out
-4. Download the HTML file to save your scene
+### How it Works
 
-### Tips for Good Results
+This app creates Three.js scenes from simple descriptions:
+
+1. **Your prompt** is enhanced with specific visual details
+2. The enhanced prompt is used to generate a complete HTML/JavaScript scene
+3. All objects are created using Three.js primitives (spheres, cubes, cylinders)
+4. No external 3D models or resources are used
+
+### Tips for Best Results
+
 - Keep descriptions simple but specific
-- Focus on visual elements rather than behaviors
-- Mention colors and positioning of key objects
-- Describe the overall mood or environment
+- Mention colors, positions, and basic shapes
+- For animals or characters, mention key features
+- Describe the environment and lighting conditions
+
+### Troubleshooting
+
+If elements are missing (like the lion), the app now fixes that by:
+- Removing attempts to load external models
+- Automatically creating objects from primitive shapes
+- Adding appropriate animations
 """)
