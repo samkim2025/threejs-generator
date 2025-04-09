@@ -24,6 +24,10 @@ if "raw_prompt" not in st.session_state:
     st.session_state.raw_prompt = ""
 if "enhanced_prompt" not in st.session_state:
     st.session_state.enhanced_prompt = ""
+if "show_enhanced_complete" not in st.session_state:
+    st.session_state.show_enhanced_complete = False
+if "current_enhanced_prompt" not in st.session_state:
+    st.session_state.current_enhanced_prompt = ""
 
 # Pre-built scenes (only solar system)
 def get_solar_system_scene():
@@ -624,70 +628,86 @@ with tab1:
 with tab2:
     st.subheader("Generate Custom Scene")
     
-    with st.form("custom_scene_form"):
-        user_prompt = st.text_area(
-            "Describe your 3D scene:",
-            placeholder="A futuristic city with neon buildings and flying vehicles",
-            height=100
-        )
+    # Check if we're at the review stage
+    if st.session_state.show_enhanced_complete:
+        st.subheader("Enhanced Prompt")
+        st.write(st.session_state.current_enhanced_prompt)
         
-        # Checkbox to view enhanced prompt before generation
-        show_enhanced = st.checkbox("Show enhanced prompt before generation")
-        
-        submitted = st.form_submit_button("Generate Custom Scene")
-        
-        if submitted and user_prompt:
-            if show_enhanced:
-                # Just show the enhanced prompt without generating
-                with st.spinner("Enhancing your prompt..."):
-                    enhanced_prompt, enhance_error = asyncio.run(enhance_prompt(user_prompt))
-                    if enhance_error:
-                        st.error(f"Error enhancing prompt: {enhance_error}")
-                    else:
-                        st.session_state.raw_prompt = user_prompt
-                        st.session_state.enhanced_prompt = enhanced_prompt
-                        
-                        st.subheader("Enhanced Prompt")
-                        st.write(enhanced_prompt)
-                        
-                        if st.button("Continue with this enhanced prompt"):
-                            with st.spinner("Generating your 3D scene... (this may take up to a minute)"):
-                                # Call API with enhanced prompt
-                                response_text, debug_info = asyncio.run(call_anthropic_api(enhanced_prompt))
-                                
-                                if response_text:
-                                    # Extract HTML
-                                    final_html = extract_html_from_response(response_text)
-                                    
-                                    # Save current scene to state
-                                    st.session_state.current_scene = {
-                                        "prompt": user_prompt,
-                                        "enhanced_prompt": enhanced_prompt,
-                                        "html": final_html, 
-                                        "full_response": response_text,
-                                        "is_preset": False
-                                    }
-                                    st.success("Scene generated successfully!")
-                                else:
-                                    st.error("Failed to generate scene. See Debug tab for details.")
-            else:
-                # Generate directly with enhanced prompt
-                with st.spinner("Generating your 3D scene with enhanced details... (this may take up to 2 minutes)"):
-                    # Use the two-step process
-                    html_content, full_response, enhanced_prompt = asyncio.run(get_custom_scene_with_enhancement(user_prompt))
+        # Button to continue with generation
+        if st.button("Generate Scene with this Enhanced Prompt"):
+            with st.spinner("Generating your 3D scene... (this may take up to a minute)"):
+                # Call API with enhanced prompt
+                response_text, debug_info = asyncio.run(call_anthropic_api(st.session_state.current_enhanced_prompt))
+                
+                if response_text:
+                    # Extract HTML
+                    final_html = extract_html_from_response(response_text)
                     
-                    if html_content:
-                        # Save current scene to state
-                        st.session_state.current_scene = {
-                            "prompt": user_prompt,
-                            "enhanced_prompt": enhanced_prompt,
-                            "html": html_content, 
-                            "full_response": full_response,
-                            "is_preset": False
-                        }
-                        st.success("Scene generated successfully!")
-                    else:
-                        st.error("Failed to generate scene. See Debug tab for details.")
+                    # Save current scene to state
+                    st.session_state.current_scene = {
+                        "prompt": st.session_state.raw_prompt,
+                        "enhanced_prompt": st.session_state.current_enhanced_prompt,
+                        "html": final_html, 
+                        "full_response": response_text,
+                        "is_preset": False
+                    }
+                    # Reset the review stage flag
+                    st.session_state.show_enhanced_complete = False
+                    st.success("Scene generated successfully!")
+                else:
+                    st.error("Failed to generate scene. See Debug tab for details.")
+        
+        # Button to go back
+        if st.button("Back to Prompt"):
+            st.session_state.show_enhanced_complete = False
+            st.experimental_rerun()
+    
+    # If not at review stage, show the form
+    else:
+        with st.form("custom_scene_form"):
+            user_prompt = st.text_area(
+                "Describe your 3D scene:",
+                placeholder="A futuristic city with neon buildings and flying vehicles",
+                height=100
+            )
+            
+            # Checkbox to view enhanced prompt before generation
+            show_enhanced = st.checkbox("Show enhanced prompt before generation")
+            
+            submitted = st.form_submit_button("Generate Scene")
+            
+            if submitted and user_prompt:
+                if show_enhanced:
+                    # Just show the enhanced prompt without generating
+                    with st.spinner("Enhancing your prompt..."):
+                        enhanced_prompt, enhance_error = asyncio.run(enhance_prompt(user_prompt))
+                        if enhance_error:
+                            st.error(f"Error enhancing prompt: {enhance_error}")
+                        else:
+                            # Store the prompts and set the review flag
+                            st.session_state.raw_prompt = user_prompt
+                            st.session_state.enhanced_prompt = enhanced_prompt
+                            st.session_state.current_enhanced_prompt = enhanced_prompt
+                            st.session_state.show_enhanced_complete = True
+                            st.experimental_rerun()
+                else:
+                    # Generate directly with enhanced prompt
+                    with st.spinner("Generating your 3D scene with enhanced details... (this may take up to 2 minutes)"):
+                        # Use the two-step process
+                        html_content, full_response, enhanced_prompt = asyncio.run(get_custom_scene_with_enhancement(user_prompt))
+                        
+                        if html_content:
+                            # Save current scene to state
+                            st.session_state.current_scene = {
+                                "prompt": user_prompt,
+                                "enhanced_prompt": enhanced_prompt,
+                                "html": html_content, 
+                                "full_response": full_response,
+                                "is_preset": False
+                            }
+                            st.success("Scene generated successfully!")
+                        else:
+                            st.error("Failed to generate scene. See Debug tab for details.")
 
 with tab3:
     st.subheader("Debug Information")
