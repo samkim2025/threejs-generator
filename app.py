@@ -21,53 +21,68 @@ if "debug_info" not in st.session_state:
 # Get API key
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 
-# Improved prompt enhancer with examples
+# Example mappings to guide the model
+EXAMPLE_MAPPINGS = [
+    {
+        "simple": "A cool city with many buildings",
+        "enhanced": "Create a 3D city scene using Three.js that features a bustling urban environment with skyscrapers, apartment buildings, and smaller shops lining the streets. Incorporate roads with moving cars, traffic lights, and pedestrian crossings to bring the city to life. Add pedestrians walking on sidewalks and crossing the streets to enhance realism. Include street elements such as lampposts, benches, and trees for a more immersive experience. Utilize dynamic lighting to simulate day and night cycles, and implement basic camera controls to allow users to explore the vibrant cityscape from different perspectives.",
+        "key_elements": [
+            "Varied building types (skyscrapers, apartments, shops)",
+            "Road networks with vehicles",
+            "Pedestrians with walking animations",
+            "Street furniture (lampposts, benches, trees)",
+            "Traffic lights with changing states",
+            "Day/night cycle with dynamic lighting",
+            "Camera controls for scene navigation"
+        ]
+    },
+    {
+        "simple": "A forest with animals",
+        "enhanced": "Create a lush 3D forest environment with diverse vegetation including tall pine trees, deciduous trees with animated leaves, and undergrowth with ferns and bushes. Add wildlife such as deer that graze and move through clearings, rabbits that hop between bushes, and birds that fly overhead and perch on branches. Include a winding stream with reflective water surface and rocks protruding from it. Implement dappled lighting through the tree canopy, with sunbeams that break through and illuminate particles in the air. Add ambient nature sounds like rustling leaves, flowing water, and occasional animal calls to create an immersive woodland experience. Allow viewers to explore the scene with intuitive camera controls."
+    }
+]
+
+# Enhanced prompt function using explicit examples
 async def enhance_prompt(basic_prompt):
-    """Enhance a basic prompt with rich details for 3D scene generation"""
+    """Transform a basic prompt into a detailed scene description"""
     headers = {
         "x-api-key": ANTHROPIC_API_KEY,
         "content-type": "application/json",
         "anthropic-version": "2023-06-01"
     }
     
-    # Significantly improved system prompt with examples and clear direction
-    system_prompt = """You are an expert at transforming simple scene descriptions into detailed, vivid scene specifications for 3D visualization.
+    # Build a system prompt with examples
+    example_text = ""
+    for example in EXAMPLE_MAPPINGS:
+        example_text += f"SIMPLE: \"{example['simple']}\"\n"
+        example_text += f"ENHANCED: \"{example['enhanced']}\"\n\n"
+    
+    system_prompt = f"""You transform simple scene descriptions into detailed specifications for 3D visualization.
 
-Your task is to expand basic prompts into rich, detailed scene descriptions, adding significant visual details while maintaining the core concept.
+Here are examples of the exact transformation expected:
 
-Here are examples of the level of enhancement expected:
+{example_text}
+Your job is to transform the user's simple prompt into a similar enhanced description that describes:
+1. Core visual elements with specific details (shapes, sizes, colors)
+2. Movement and animations that bring the scene to life
+3. Lighting and atmospheric effects
+4. Interactive elements where appropriate
+5. Spatial relationships between objects
 
-BASIC: "A cool city with many buildings"
-ENHANCED: "Create a 3D city scene featuring a bustling urban environment with skyscrapers, apartment buildings, and smaller shops lining the streets. Incorporate roads with moving cars, traffic lights, and pedestrian crossings to bring the city to life. Add pedestrians walking on sidewalks and crossing the streets to enhance realism. Include street elements such as lampposts, benches, and trees for a more immersive experience. Utilize dynamic lighting to simulate day and night cycles, and implement basic camera controls to allow users to explore the vibrant cityscape from different perspectives."
-
-BASIC: "A forest with animals"
-ENHANCED: "Create a lush 3D forest scene with dense, varied vegetation including tall pine trees, leafy deciduous trees, and undergrowth of ferns and bushes. Populate the forest with wildlife such as deer grazing in clearings, rabbits hopping between bushes, and birds flying overhead or perched on branches. Include a small stream winding through the forest with rocks and fallen logs. Create dappled lighting effects as sunlight filters through the canopy, with particles representing dust or pollen floating in the light beams. Add ambient sounds of rustling leaves, flowing water, and occasional animal calls to complete the immersive forest experience."
-
-BASIC: "A spaceship flying through asteroids"
-ENHANCED: "Create a dynamic 3D space scene featuring a sleek, futuristic spaceship navigating through a dense asteroid field. The spaceship should have glowing engines, detailed exterior paneling, and occasional thruster bursts as it maneuvers. Surround it with various sized asteroids - from small rocky debris to massive cratered boulders - all slowly rotating and moving through space. Include distant stars and nebulae as background elements to create depth. Add dramatic lighting effects with the nearest star casting harsh shadows across the spaceship and asteroids. Implement particle effects for engine exhaust and small collisions between asteroids. Allow the camera to follow behind the spaceship as it weaves through this hazardous environment, giving viewers a sense of speed and danger."
-
-Your enhancements should:
-1. Add specific visual elements and their attributes (shapes, colors, sizes, materials)
-2. Describe environmental details and atmosphere
-3. Suggest movement and animations
-4. Mention lighting and special effects
-5. Describe spatial relationships between objects
-
-The enhancement should be 150-250 words long and focus entirely on visual appearance and behavior, not implementation details."""
+The enhanced description should be 150-250 words and focus entirely on what should appear in the scene."""
     
     data = {
-        "model": "claude-3-opus-20240229",  # Using Opus for better enhancement
+        "model": "claude-3-opus-20240229",
         "max_tokens": 750,
         "temperature": 0.3,
         "system": system_prompt,
         "messages": [
-            {"role": "user", "content": f"""Transform this basic 3D scene description:
+            {"role": "user", "content": f"""Transform this simple description:
 
 "{basic_prompt}"
 
-Into a richly detailed scene description similar to the examples in your instructions. 
-Make sure to add significant visual details about objects, environment, lighting, movement, and atmosphere.
-Focus only on what the scene should look like and how it should behave, not on implementation details."""}
+Into a detailed scene description similar to the examples in your instructions.
+Focus only on what should appear in the scene and how it should behave."""}
         ]
     }
     
@@ -89,8 +104,8 @@ Focus only on what the scene should look like and how it should behave, not on i
         else:
             return basic_prompt, "No content in response"
 
-# Scene generator - creates a complete Three.js scene from a prompt
-async def generate_scene(prompt):
+# Scene generator with improved template approach
+async def generate_scene(prompt, simple_prompt):
     """Generate a complete Three.js scene from a prompt"""
     headers = {
         "x-api-key": ANTHROPIC_API_KEY,
@@ -98,24 +113,326 @@ async def generate_scene(prompt):
         "anthropic-version": "2023-06-01"
     }
     
-    system_prompt = """You are an expert Three.js developer with a specialty in creating complete, working 3D scenes with HTML, CSS, and JavaScript.
+    # Get example mapping that best matches the concept
+    best_example = None
+    for example in EXAMPLE_MAPPINGS:
+        if any(keyword in simple_prompt.lower() for keyword in example["simple"].lower().split()):
+            best_example = example
+            break
+    
+    if not best_example:
+        best_example = EXAMPLE_MAPPINGS[0]  # Default to city example
+    
+    # Create a system prompt with the full mapping example
+    city_example_html = """<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D City Scene</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+        }
+        canvas {
+            display: block;
+        }
+        #info {
+            position: absolute;
+            top: 10px;
+            width: 100%;
+            text-align: center;
+            color: white;
+            font-family: Arial, sans-serif;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="info">3D City Scene - Use mouse to navigate</div>
+    <script src="https://unpkg.com/three@0.137.0/build/three.min.js"></script>
+    <script src="https://unpkg.com/three@0.137.0/examples/js/controls/OrbitControls.js"></script>
+    <script>
+        // Scene, camera, renderer setup
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+        
+        // Background
+        scene.background = new THREE.Color(0x87CEEB);
+        
+        // Camera and controls
+        camera.position.set(30, 30, 30);
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        
+        // Lights
+        const ambientLight = new THREE.AmbientLight(0x404040, 0.5);
+        scene.add(ambientLight);
+        
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+        directionalLight.position.set(50, 100, 50);
+        directionalLight.castShadow = true;
+        scene.add(directionalLight);
+        
+        // Ground
+        const groundGeometry = new THREE.PlaneBufferGeometry(200, 200);
+        const groundMaterial = new THREE.MeshStandardMaterial({ color: 0x333333 });
+        const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+        ground.rotation.x = -Math.PI / 2;
+        ground.receiveShadow = true;
+        scene.add(ground);
+        
+        // Buildings
+        function createBuilding(x, z, width, height, depth) {
+            const buildingGeometry = new THREE.BoxBufferGeometry(width, height, depth);
+            const buildingMaterial = new THREE.MeshStandardMaterial({
+                color: Math.random() > 0.5 ? 0x808080 : 0xa0a0a0,
+                roughness: 0.7
+            });
+            
+            const building = new THREE.Mesh(buildingGeometry, buildingMaterial);
+            building.position.set(x, height/2, z);
+            building.castShadow = true;
+            building.receiveShadow = true;
+            scene.add(building);
+            
+            // Add windows
+            if (height > 5) {
+                const windowSize = 0.5;
+                const windowGeometry = new THREE.PlaneBufferGeometry(windowSize, windowSize);
+                const windowMaterial = new THREE.MeshStandardMaterial({
+                    color: 0xaaaaff,
+                    emissive: 0x555555,
+                    emissiveIntensity: 0.2
+                });
+                
+                // Calculate number of windows based on building size
+                const windowsPerFloor = Math.max(1, Math.floor(width / 2));
+                const floors = Math.max(1, Math.floor(height / 3));
+                
+                for (let floor = 0; floor < floors; floor++) {
+                    for (let i = 0; i < windowsPerFloor; i++) {
+                        // Front windows
+                        const frontWindow = new THREE.Mesh(windowGeometry, windowMaterial.clone());
+                        frontWindow.position.set(
+                            x - width/2 + (i + 0.5) * (width / windowsPerFloor),
+                            floor * 3 + 1.5,
+                            z + depth/2 + 0.01
+                        );
+                        scene.add(frontWindow);
+                        
+                        // Back windows
+                        const backWindow = new THREE.Mesh(windowGeometry, windowMaterial.clone());
+                        backWindow.position.set(
+                            x - width/2 + (i + 0.5) * (width / windowsPerFloor),
+                            floor * 3 + 1.5,
+                            z - depth/2 - 0.01
+                        );
+                        backWindow.rotation.y = Math.PI;
+                        scene.add(backWindow);
+                    }
+                }
+            }
+            
+            return building;
+        }
+        
+        // Create buildings in a grid
+        const buildings = [];
+        for (let x = -80; x < 80; x += 20) {
+            for (let z = -80; z < 80; z += 20) {
+                // Vary building sizes
+                const width = 5 + Math.random() * 10;
+                const height = 5 + Math.random() * 40;
+                const depth = 5 + Math.random() * 10;
+                
+                // Add random offset to position
+                const offsetX = (Math.random() - 0.5) * 10;
+                const offsetZ = (Math.random() - 0.5) * 10;
+                
+                // Create building
+                const building = createBuilding(x + offsetX, z + offsetZ, width, height, depth);
+                buildings.push(building);
+            }
+        }
+        
+        // Create roads
+        function createRoad(x1, z1, x2, z2, width) {
+            const length = Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(z2 - z1, 2));
+            const roadGeometry = new THREE.PlaneBufferGeometry(length, width);
+            const roadMaterial = new THREE.MeshStandardMaterial({ color: 0x333333 });
+            const road = new THREE.Mesh(roadGeometry, roadMaterial);
+            
+            // Position and rotate to connect the points
+            road.position.set((x1 + x2) / 2, 0.01, (z1 + z2) / 2);
+            road.rotation.x = -Math.PI / 2;
+            road.rotation.z = Math.atan2(z2 - z1, x2 - x1);
+            
+            road.receiveShadow = true;
+            scene.add(road);
+            
+            return road;
+        }
+        
+        // Create grid of roads
+        const roads = [];
+        for (let i = -80; i <= 80; i += 20) {
+            // Horizontal roads
+            createRoad(-80, i, 80, i, 10);
+            // Vertical roads
+            createRoad(i, -80, i, 80, 10);
+        }
+        
+        // Create cars
+        const cars = [];
+        function createCar() {
+            const car = new THREE.Group();
+            
+            // Car body
+            const bodyGeometry = new THREE.BoxBufferGeometry(2, 0.7, 1);
+            const bodyMaterial = new THREE.MeshStandardMaterial({
+                color: Math.random() * 0xffffff
+            });
+            const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
+            body.castShadow = true;
+            car.add(body);
+            
+            // Car top
+            const topGeometry = new THREE.BoxBufferGeometry(1, 0.5, 0.9);
+            const topMaterial = new THREE.MeshStandardMaterial({
+                color: 0x333333
+            });
+            const top = new THREE.Mesh(topGeometry, topMaterial);
+            top.position.y = 0.6;
+            top.castShadow = true;
+            car.add(top);
+            
+            // wheels
+            const wheelGeometry = new THREE.CylinderBufferGeometry(0.3, 0.3, 0.2, 8);
+            const wheelMaterial = new THREE.MeshStandardMaterial({ color: 0x333333 });
+            
+            const wheel1 = new THREE.Mesh(wheelGeometry, wheelMaterial);
+            wheel1.position.set(0.7, -0.3, 0.5);
+            wheel1.rotation.z = Math.PI / 2;
+            car.add(wheel1);
+            
+            const wheel2 = new THREE.Mesh(wheelGeometry, wheelMaterial);
+            wheel2.position.set(0.7, -0.3, -0.5);
+            wheel2.rotation.z = Math.PI / 2;
+            car.add(wheel2);
+            
+            const wheel3 = new THREE.Mesh(wheelGeometry, wheelMaterial);
+            wheel3.position.set(-0.7, -0.3, 0.5);
+            wheel3.rotation.z = Math.PI / 2;
+            car.add(wheel3);
+            
+            const wheel4 = new THREE.Mesh(wheelGeometry, wheelMaterial);
+            wheel4.position.set(-0.7, -0.3, -0.5);
+            wheel4.rotation.z = Math.PI / 2;
+            car.add(wheel4);
+            
+            // Add to scene
+            scene.add(car);
+            
+            // Random position on a road
+            const lane = Math.floor(Math.random() * 9) - 4;
+            const randomPos = (Math.random() - 0.5) * 160;
+            
+            if (Math.random() > 0.5) {
+                // Horizontal road
+                car.position.set(randomPos, 0.6, lane * 20);
+                car.rotation.y = Math.random() > 0.5 ? 0 : Math.PI;
+            } else {
+                // Vertical road
+                car.position.set(lane * 20, 0.6, randomPos);
+                car.rotation.y = Math.random() > 0.5 ? Math.PI / 2 : -Math.PI / 2;
+            }
+            
+            // Store direction
+            car.userData.direction = car.rotation.y;
+            car.userData.speed = 0.1 + Math.random() * 0.1;
+            
+            return car;
+        }
+        
+        // Create cars
+        for (let i = 0; i < 30; i++) {
+            cars.push(createCar());
+        }
+        
+        // Animation loop
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            // Update car positions
+            cars.forEach(car => {
+                const speed = car.userData.speed;
+                
+                // Move car based on its rotation
+                if (car.rotation.y === 0) {
+                    car.position.x += speed;
+                    if (car.position.x > 85) car.position.x = -85;
+                } else if (Math.abs(car.rotation.y - Math.PI) < 0.1) {
+                    car.position.x -= speed;
+                    if (car.position.x < -85) car.position.x = 85;
+                } else if (Math.abs(car.rotation.y - Math.PI/2) < 0.1) {
+                    car.position.z -= speed;
+                    if (car.position.z < -85) car.position.z = 85;
+                } else {
+                    car.position.z += speed;
+                    if (car.position.z > 85) car.position.z = -85;
+                }
+            });
+            
+            // Update controls
+            controls.update();
+            
+            // Render scene
+            renderer.render(scene, camera);
+        }
+        
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+        
+        // Start animation loop
+        animate();
+    </script>
+</body>
+</html>"""
+    
+    system_prompt = f"""You are an expert Three.js developer who creates complete, working 3D web applications.
 
-Your task is to generate a SINGLE, COMPLETE HTML file containing a Three.js scene based on the user's description. This file will be directly displayed in a web component.
+I'll provide you with a description of a 3D scene. Your task is to generate a SINGLE, COMPLETE HTML file containing a Three.js scene that implements this description.
 
-CRITICAL REQUIREMENTS:
-1. Your output MUST be a COMPLETE HTML document with <!DOCTYPE html>, <html>, <head>, and <body> tags
-2. Include CDN links to Three.js (version 0.137.0 or newer) and OrbitControls
-3. Create a responsive scene that works on all screen sizes
-4. Use ONLY BufferGeometry (NOT Geometry which is deprecated)
-5. Include proper orbit controls for camera navigation
-6. Implement simple animations to bring the scene to life
-7. Use basic lighting including ambient and directional lights
-8. Ensure all code is properly closed with matching brackets and tags
-9. Create a scene that works WITHOUT external resources (no external textures, models, etc.)
-10. Keep the total code under 300 lines for reliability
+IMPORTANT - I'll show you an example of the transformation from simple prompt to enhanced description to working HTML:
 
-YOUR RESPONSE MUST CONTAIN ONLY THE COMPLETE HTML DOCUMENT - NO explanations, NO markdown formatting, NO conversation.
-Start with <!DOCTYPE html> and end with </html>."""
+SIMPLE PROMPT: "{best_example['simple']}"
+
+ENHANCED DESCRIPTION: "{best_example['enhanced']}"
+
+WORKING HTML: {city_example_html if best_example == EXAMPLE_MAPPINGS[0] else "[HTML code would be here]"}
+
+Now, create a scene based on this description: "{prompt}"
+
+Your output must:
+1. Be a COMPLETE HTML document with all necessary Three.js imports
+2. Use unpkg.com CDN links for Three.js (version 0.137.0 or newer)
+3. Include OrbitControls for camera navigation
+4. Have proper lighting, shadows, and camera setup
+5. Implement animations that bring the scene to life
+6. Include a help message in a #info div to guide users
+7. Ensure all code is properly closed and browsers will render the scene correctly
+
+RETURN ONLY THE COMPLETE HTML DOCUMENT - no explanations or markdown formatting."""
     
     data = {
         "model": "claude-3-opus-20240229",
@@ -123,29 +440,27 @@ Start with <!DOCTYPE html> and end with </html>."""
         "temperature": 0.2,
         "system": system_prompt,
         "messages": [
-            {"role": "user", "content": f"""Generate a complete, working Three.js scene based on this description:
+            {"role": "user", "content": f"""Create a complete, working Three.js scene based on this description:
 
-Description: {prompt}
+{prompt}
 
-Generate ONLY the complete HTML document with embedded JavaScript that creates this scene.
-- DO NOT use external resources (models, textures, etc.)
-- Use minimal, efficient code that will work reliably
-- Include THREE.OrbitControls for camera navigation
-- Implement simple animations to bring the scene to life
-- Ensure the scene is responsive (adapts to window size)
-- Use modern Three.js syntax including BufferGeometry (NOT the deprecated Geometry)
-- Keep the code under 300 lines total
-- Make sure all brackets, parentheses, and HTML tags are properly closed
+Generate ONLY a complete HTML document with embedded JavaScript. Your HTML must include:
+1. Proper <head> section with viewport settings and styles
+2. Three.js and OrbitControls imported from unpkg.com (not CloudFlare)
+3. A complete scene setup with proper lighting
+4. Animated elements to bring the scene to life
+5. A help message in a #info div for users
+6. Responsive design that works on all screen sizes
 
-Return ONLY a complete, working HTML document (no explanations or Markdown).
 Your response should start with <!DOCTYPE html> and end with </html>."""}
         ]
     }
     
     debug_info = {
         "request": {
-            "prompt": prompt,
-            "system_prompt": system_prompt,
+            "simple_prompt": simple_prompt,
+            "enhanced_prompt": prompt,
+            "system_prompt_length": len(system_prompt),
             "model": data["model"],
             "max_tokens": data["max_tokens"],
             "temperature": data["temperature"]
@@ -176,13 +491,15 @@ Your response should start with <!DOCTYPE html> and end with </html>."""}
             response_text = response_data["content"][0]["text"]
             # Get just the HTML portion
             html_content = extract_html_from_response(response_text)
+            # Ensure it uses reliable CDN URLs
+            html_content = fix_cdn_urls(html_content)
             debug_info["html_length"] = len(html_content)
             return html_content, debug_info
         else:
             debug_info["error"] = "No content in response"
             return None, debug_info
 
-# HTML extraction - get just the HTML document from a response
+# Extract HTML from response
 def extract_html_from_response(response_text):
     """Extract a complete HTML document from the response text"""
     # Look for a complete HTML document
@@ -245,6 +562,25 @@ def extract_html_from_response(response_text):
     
     # Last resort - create a fallback scene
     return create_fallback_scene()
+
+# Fix CDN URLs to use unpkg.com instead of CloudFlare
+def fix_cdn_urls(html_content):
+    """Replace CDN URLs with reliable ones from unpkg.com"""
+    # Replace CloudFlare Three.js URL
+    html_content = re.sub(
+        r'(https?:)?\/\/cdnjs\.cloudflare\.com\/ajax\/libs\/three\.js\/[^\/]+\/three\.min\.js',
+        'https://unpkg.com/three@0.137.0/build/three.min.js',
+        html_content
+    )
+    
+    # Replace CloudFlare OrbitControls URL
+    html_content = re.sub(
+        r'(https?:)?\/\/cdnjs\.cloudflare\.com\/ajax\/libs\/three\.js\/[^\/]+\/controls\/OrbitControls\.min\.js',
+        'https://unpkg.com/three@0.137.0/examples/js/controls/OrbitControls.js',
+        html_content
+    )
+    
+    return html_content
 
 # Create a fallback scene if all else fails
 def create_fallback_scene():
@@ -354,7 +690,7 @@ async def generate_scene_from_prompt(basic_prompt):
         prompt_to_use = enhanced_prompt
     
     # Step 2: Generate the scene with the enhanced prompt
-    html_content, debug_info = await generate_scene(prompt_to_use)
+    html_content, debug_info = await generate_scene(prompt_to_use, basic_prompt)
     
     # Store both prompts and debug info
     debug_info["original_prompt"] = basic_prompt
@@ -404,6 +740,9 @@ with tab1:
         # Show the scene in an HTML component
         st.components.v1.html(scene["html"], height=600)
         
+        # Information about navigating the scene
+        st.info("**Navigation:** Left-click + drag to rotate | Right-click + drag to pan | Scroll to zoom")
+        
         # Download button
         st.download_button(
             label="Download HTML",
@@ -437,6 +776,34 @@ with tab2:
         st.subheader("Debug Information")
         with st.expander("View Debug Info"):
             st.json(scene["debug_info"])
+
+# Troubleshooting info
+st.markdown("---")
+st.subheader("Troubleshooting")
+with st.expander("If you don't see the 3D scene"):
+    st.markdown("""
+    ### If the scene doesn't appear:
+    
+    1. **Check for browser requirements**:
+       - Ensure you have WebGL enabled in your browser
+       - Try a modern browser like Chrome, Firefox, or Edge
+    
+    2. **Download the HTML file**:
+       - Click the "Download HTML" button
+       - Open the file directly in your browser
+    
+    3. **Look for console errors**:
+       - Right-click on the page > Inspect > Console
+       - Check for any error messages
+       
+    4. **Try a simple prompt**:
+       - Start with something basic like "A simple cube"
+       - Complex scenes may require more processing power
+    
+    5. **If all else fails**:
+       - Try reloading the page
+       - Generate the scene again with a different prompt
+    """)
 
 # Instructions
 st.markdown("---")
