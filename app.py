@@ -244,7 +244,7 @@ def get_solar_system_scene():
 # Get API key (using environment variable rather than secrets for simplicity)
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 
-# Prompt enhancement function
+# Modified prompt enhancement function with length constraint
 async def enhance_prompt(basic_prompt):
     """Takes a simple prompt and expands it with detailed Three.js specifications"""
     try:
@@ -254,23 +254,21 @@ async def enhance_prompt(basic_prompt):
             "anthropic-version": "2023-06-01"
         }
         
-        system_prompt = """You are an expert in Three.js scene creation. Your task is to expand simple scene descriptions into detailed technical specifications that can be implemented in Three.js.
+        # Modified system prompt to request more concise output
+        system_prompt = """You are an expert in Three.js scene creation. Your task is to expand simple scene descriptions into technical specifications that can be implemented in Three.js.
 
-For any simple scene description, generate a highly detailed specification that covers:
-
+For the scene description, provide a focused and concise technical specification that covers:
 1. Scene elements with precise geometries, materials, and positioning
-2. Lighting setup with multiple light sources, shadows, and ambient lighting
-3. Animation details for all moving elements
+2. Lighting setup
+3. Animation details
 4. Camera settings and controls
-5. Interactive elements and behaviors
-6. Background and environmental details
-7. Advanced visual effects where appropriate
 
-Your output should be extremely detailed and technical, similar to a professional game developer's specification document. Include specific Three.js classes, methods, and techniques."""
+Be specific but also efficient with your response length. Focus on the most essential elements that would make this scene work effectively.
+Keep your response under 800 words to ensure it doesn't exceed token limits."""
         
         data = {
             "model": "claude-3-opus-20240229",
-            "max_tokens": 2000,
+            "max_tokens": 1000,  # Limiting the token count
             "temperature": 0.2,
             "system": system_prompt,
             "messages": [
@@ -278,9 +276,9 @@ Your output should be extremely detailed and technical, similar to a professiona
                 
 "{basic_prompt}"
                 
-Expand it into a highly detailed Three.js technical specification with precise details about geometries, materials, lighting, animations, and interactions. Be extremely specific and thorough, describing every element in detail.
-                
-Format the response as a detailed technical brief that a Three.js developer would follow to implement the scene."""}
+Expand it into a detailed but concise Three.js technical specification that can be implemented efficiently.
+Focus on the core elements needed to create this scene.
+Keep your response under 800 words."""}
             ]
         }
         
@@ -305,7 +303,7 @@ Format the response as a detailed technical brief that a Three.js developer woul
     except Exception as e:
         return basic_prompt, f"Exception enhancing prompt: {str(e)}"
 
-# Direct approach to API call with better debugging
+# Modified API call with emphasis on conciseness and completeness
 async def call_anthropic_api(prompt):
     try:
         headers = {
@@ -314,37 +312,38 @@ async def call_anthropic_api(prompt):
             "anthropic-version": "2023-06-01"
         }
         
-        # Improved system prompt with more directive guidance
+        # Modified system prompt focusing on concise, complete output
         system_prompt = """You are an expert in Three.js 3D scene creation.
 
-Your task is to generate a working, standalone HTML document with a Three.js scene based on the user's description.
+Your task is to generate a CONCISE, working HTML document with a Three.js scene based on the user's description.
 
-Important requirements:
-1. The output must be a COMPLETE and VALID HTML document
-2. Include the necessary Three.js library and OrbitControls
-3. Create a scene that works without external resources
-4. Implement the scene exactly as described by the user
-5. Include proper camera controls, lighting, and animation
-6. Make sure all code is properly closed and syntactically correct
+IMPORTANT REQUIREMENTS:
+1. Create a MINIMAL but COMPLETE HTML file with less than 250 lines of code
+2. Focus on creating a BASIC scene that captures the essence of the request
+3. Use simple geometries and techniques - prioritize WORKING code over complexity
+4. AVOID complex shaders, excessive objects, or detailed models
+5. Make sure your response is COMPLETE with all closing tags and brackets
+6. Use Three.js version 0.137.0 and OrbitControls
 
-DO NOT include explanations or markdown - ONLY output the full HTML document.
-DO NOT truncate your response - I need the COMPLETE HTML file.
-Your response should START with <!DOCTYPE html> and END with </html>."""
+Your response must:
+- START with <!DOCTYPE html> and END with </html>
+- Include only the HTML document with no explanations
+- Be simple enough to avoid output truncation
+- Prioritize completeness over sophistication"""
         
         data = {
             "model": "claude-3-opus-20240229",
-            "max_tokens": 4000,
-            "temperature": 0.2,
+            "max_tokens": 3000,  # Adjusted to handle complete but concise responses
+            "temperature": 0.1,  # Lower temperature for more deterministic output
             "system": system_prompt,
             "messages": [
-                {"role": "user", "content": f"""Create a complete Three.js scene based on this description: {prompt}
+                {"role": "user", "content": f"""Create a minimal Three.js scene based on this description: {prompt}
 
-Return ONLY a working HTML document (not HTML fragments).
-Do not include any explanation or markdown formatting.
-The document should include ALL necessary scripts, styles, and code.
-It must be a COMPLETE, STANDALONE HTML file that I can save and run directly in a browser.
+Return a COMPLETE and SIMPLE HTML document. Focus on making it work rather than making it complex.
+Keep the code under 250 lines total, focusing on the core elements.
+Make sure to include proper beginning and ending tags for all HTML elements.
 
-Your response must start with <!DOCTYPE html> and contain a complete, working Three.js scene."""}
+The scene should be minimal but functional, capturing the essence of: "{prompt}"."""}
             ]
         }
         
@@ -386,198 +385,193 @@ Your response must start with <!DOCTYPE html> and contain a complete, working Th
         }
         return None, debug_info
 
-# Improved HTML extraction - focusing on getting a complete document
+# Improved HTML extraction - focusing on finding a COMPLETE document
 def extract_html_from_response(response_text):
-    # Look for complete HTML document
-    html_pattern = r"<!DOCTYPE html>[\s\S]*?<\/html>"
+    # Look for complete HTML document with doctype
+    doctype_pattern = r"<!DOCTYPE html>[\s\S]*?<\/html>"
+    doctype_matches = re.search(doctype_pattern, response_text, re.IGNORECASE)
+    
+    if doctype_matches:
+        return doctype_matches.group(0)
+    
+    # Try looking for HTML without doctype
+    html_pattern = r"<html[\s\S]*?<\/html>"
     html_matches = re.search(html_pattern, response_text, re.IGNORECASE)
     
     if html_matches:
-        return html_matches.group(0)
+        html_content = html_matches.group(0)
+        return f"<!DOCTYPE html>\n{html_content}"
     
-    # If no complete document, look for code blocks
+    # Look for code blocks
     code_block_pattern = r"```(?:html)?([\s\S]*?)```"
     code_matches = re.findall(code_block_pattern, response_text)
     
     if code_matches:
-        # Check if any code block contains complete HTML
+        # Try each code block to find HTML content
         for code in code_matches:
             code = code.strip()
-            if code.lower().startswith("<!doctype html>") or code.lower().startswith("<html"):
-                # This looks like a complete HTML document
-                return code
+            if "<html" in code.lower() or "<!doctype" in code.lower():
+                # This appears to be HTML
+                if code.lower().startswith("<!doctype html>"):
+                    return code
+                elif code.lower().startswith("<html"):
+                    return f"<!DOCTYPE html>\n{code}"
+                else:
+                    # Fragment of HTML - try to identify the structure
+                    if "<body" in code and "</body>" in code:
+                        return f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Generated Three.js Scene</title>
+    <style>
+        body {{ margin: 0; overflow: hidden; }}
+    </style>
+</head>
+{code}
+</html>"""
         
-        # If no complete HTML found in code blocks, use the first block and wrap it
+        # If we reach here, use the first code block and try to make it complete
         html_content = code_matches[0].strip()
         
-        # If it contains script tag but no HTML structure, wrap it properly
-        if "<script>" in html_content and not (html_content.lower().startswith("<!doctype") or html_content.lower().startswith("<html")):
-            return f"""
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <meta charset="utf-8">
-                <title>Generated Three.js Scene</title>
-                <style>
-                    body {{ margin: 0; overflow: hidden; }}
-                    #info {{
-                        position: absolute;
-                        top: 10px;
-                        width: 100%;
-                        text-align: center;
-                        color: white;
-                        font-family: Arial, sans-serif;
-                        pointer-events: none;
-                        text-shadow: 1px 1px 1px black;
-                    }}
-                </style>
-            </head>
-            <body>
-                <div id="info">Generated Three.js Scene - Use mouse to navigate</div>
-                <script src="https://unpkg.com/three@0.137.0/build/three.min.js"></script>
-                <script src="https://unpkg.com/three@0.137.0/examples/js/controls/OrbitControls.js"></script>
-                {html_content}
-            </body>
-            </html>
-            """
-        else:
-            return html_content
-    
-    # If we still don't have HTML, look for Three.js specific code in the response
-    if "new THREE." in response_text:
-        # Extract all text from response and wrap it in a proper document
-        js_code = response_text.strip()
-        
-        # Ensure it's wrapped in script tags if not already
-        if not js_code.startswith("<script>"):
-            js_code = f"<script>\n{js_code}\n</script>"
-        
-        return f"""
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <meta charset="utf-8">
-            <title>Generated Three.js Scene</title>
-            <style>
-                body {{ margin: 0; overflow: hidden; }}
-                #info {{
-                    position: absolute;
-                    top: 10px;
-                    width: 100%;
-                    text-align: center;
-                    color: white;
-                    font-family: Arial, sans-serif;
-                    pointer-events: none;
-                    text-shadow: 1px 1px 1px black;
-                }}
-            </style>
-        </head>
-        <body>
-            <div id="info">Generated Three.js Scene - Use mouse to navigate</div>
-            <script src="https://unpkg.com/three@0.137.0/build/three.min.js"></script>
-            <script src="https://unpkg.com/three@0.137.0/examples/js/controls/OrbitControls.js"></script>
-            {js_code}
-        </body>
-        </html>
-        """
-    
-    # Last resort fallback - create a basic scene template with a message
-    return f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <meta charset="utf-8">
-        <title>Generated Three.js Scene</title>
-        <style>
-            body {{ margin: 0; overflow: hidden; }}
-            #info {{
-                position: absolute;
-                top: 10px;
-                width: 100%;
-                text-align: center;
-                color: white;
-                font-family: Arial, sans-serif;
-                pointer-events: none;
-                text-shadow: 1px 1px 1px black;
-            }}
-        </style>
-    </head>
-    <body>
-        <div id="info">Generated Three.js Scene - Could not parse response properly</div>
-        <script src="https://unpkg.com/three@0.137.0/build/three.min.js"></script>
-        <script src="https://unpkg.com/three@0.137.0/examples/js/controls/OrbitControls.js"></script>
-        <script>
-        // Scene setup
-        const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x335577);
-        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        const renderer = new THREE.WebGLRenderer();
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.shadowMap.enabled = true;
-        document.body.appendChild(renderer.domElement);
-
-        // Controls
-        const controls = new THREE.OrbitControls(camera, renderer.domElement);
-        camera.position.set(0, 5, 10);
-        controls.update();
-
-        // Lights
-        const ambientLight = new THREE.AmbientLight(0x404040, 0.5);
-        scene.add(ambientLight);
-        
-        const dirLight = new THREE.DirectionalLight(0xffffff, 1);
-        dirLight.position.set(5, 10, 7.5);
-        dirLight.castShadow = true;
-        scene.add(dirLight);
-        
-        // Fallback object with user prompt text
-        const geometry = new THREE.BoxGeometry(5, 1, 5);
-        const material = new THREE.MeshPhongMaterial({{ color: 0xff4444 }});
-        const cube = new THREE.Mesh(geometry, material);
-        cube.castShadow = true;
-        cube.position.y = 0.5;
-        scene.add(cube);
-        
-        // Add text showing the scene couldn't be generated
-        const canvas = document.createElement('canvas');
-        canvas.width = 512;
-        canvas.height = 256;
-        const context = canvas.getContext('2d');
-        context.fillStyle = '#ffffff';
-        context.fillRect(0, 0, canvas.width, canvas.height);
-        context.font = 'Bold 36px Arial';
-        context.fillStyle = '#000000';
-        context.textAlign = 'center';
-        context.fillText('Scene generation error', canvas.width/2, canvas.height/2 - 20);
-        context.font = '24px Arial';
-        context.fillText('See debug info for details', canvas.width/2, canvas.height/2 + 20);
-        
-        const texture = new THREE.CanvasTexture(canvas);
-        const textGeometry = new THREE.PlaneGeometry(4, 2);
-        const textMaterial = new THREE.MeshBasicMaterial({{ map: texture, side: THREE.DoubleSide }});
-        const textMesh = new THREE.Mesh(textGeometry, textMaterial);
-        textMesh.position.set(0, 2, 0);
-        scene.add(textMesh);
-        
-        // Animation loop
-        function animate() {{
-            requestAnimationFrame(animate);
-            cube.rotation.y += 0.01;
-            controls.update();
-            renderer.render(scene, camera);
+        # Check if it contains the Three.js scene setup
+        if "new THREE.Scene" in html_content:
+            if not html_content.startswith("<script>"):
+                html_content = f"<script>\n{html_content}\n</script>"
+            
+            return f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Generated Three.js Scene</title>
+    <style>
+        body {{ margin: 0; overflow: hidden; }}
+        #info {{
+            position: absolute;
+            top: 10px;
+            width: 100%;
+            text-align: center;
+            color: white;
+            font-family: Arial, sans-serif;
+            pointer-events: none;
+            text-shadow: 1px 1px 1px black;
         }}
-        animate();
+    </style>
+</head>
+<body>
+    <div id="info">Generated Three.js Scene - Use mouse to navigate</div>
+    <script src="https://unpkg.com/three@0.137.0/build/three.min.js"></script>
+    <script src="https://unpkg.com/three@0.137.0/examples/js/controls/OrbitControls.js"></script>
+    {html_content}
+</body>
+</html>"""
+    
+    # Last resort - check if there's any JavaScript THREE.js code in the response
+    if "new THREE." in response_text:
+        # Extract the JavaScript section, assuming it's the main content
+        js_code = response_text.split("new THREE.")[1:]
+        js_code = "new THREE." + "new THREE.".join(js_code)
         
-        // Handle window resize
-        window.addEventListener('resize', function() {{
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        }});
-        </script>
-    </body>
-    </html>
-    """
+        # Wrap with proper HTML structure
+        return f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Generated Three.js Scene</title>
+    <style>
+        body {{ margin: 0; overflow: hidden; }}
+        #info {{
+            position: absolute;
+            top: 10px;
+            width: 100%;
+            text-align: center;
+            color: white;
+            font-family: Arial, sans-serif;
+            pointer-events: none;
+            text-shadow: 1px 1px 1px black;
+        }}
+    </style>
+</head>
+<body>
+    <div id="info">Generated Three.js Scene - Use mouse to navigate</div>
+    <script src="https://unpkg.com/three@0.137.0/build/three.min.js"></script>
+    <script src="https://unpkg.com/three@0.137.0/examples/js/controls/OrbitControls.js"></script>
+    <script>
+    // Scene setup from API response
+    {js_code}
+    </script>
+</body>
+</html>"""
+    
+    # Fallback template with error message
+    return f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Generated Three.js Scene</title>
+    <style>
+        body {{ margin: 0; overflow: hidden; }}
+        #info {{
+            position: absolute;
+            top: 10px;
+            width: 100%;
+            text-align: center;
+            color: white;
+            font-family: Arial, sans-serif;
+            pointer-events: none;
+            text-shadow: 1px 1px 1px black;
+        }}
+    </style>
+</head>
+<body>
+    <div id="info">Could not generate proper Three.js scene - See debug info</div>
+    <script src="https://unpkg.com/three@0.137.0/build/three.min.js"></script>
+    <script src="https://unpkg.com/three@0.137.0/examples/js/controls/OrbitControls.js"></script>
+    <script>
+    // Basic scene setup
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x335577);
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+    const renderer = new THREE.WebGLRenderer();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;
+    document.body.appendChild(renderer.domElement);
+
+    // Controls
+    const controls = new THREE.OrbitControls(camera, renderer.domElement);
+    camera.position.set(0, 5, 10);
+    controls.update();
+
+    // Light
+    const light = new THREE.DirectionalLight(0xffffff, 1);
+    light.position.set(5, 10, 7.5);
+    scene.add(light);
+    
+    // Error message object
+    const geometry = new THREE.BoxGeometry(5, 1, 5);
+    const material = new THREE.MeshBasicMaterial({{ color: 0xff4444 }});
+    const cube = new THREE.Mesh(geometry, material);
+    cube.position.y = 0.5;
+    scene.add(cube);
+    
+    // Animation loop
+    function animate() {{
+        requestAnimationFrame(animate);
+        cube.rotation.y += 0.01;
+        controls.update();
+        renderer.render(scene, camera);
+    }}
+    animate();
+    
+    // Handle window resize
+    window.addEventListener('resize', function() {{
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+    }});
+    </script>
+</body>
+</html>"""
 
 # Get custom scene with prompt enhancement
 async def get_custom_scene_with_enhancement(basic_prompt):
@@ -628,39 +622,43 @@ with tab1:
 with tab2:
     st.subheader("Generate Custom Scene")
     
-    # Check if we're at the review stage
+    # Check if we're at the review stage for the enhanced prompt
     if st.session_state.show_enhanced_complete:
         st.subheader("Enhanced Prompt")
         st.write(st.session_state.current_enhanced_prompt)
         
+        col1, col2 = st.columns(2)
+        
         # Button to continue with generation
-        if st.button("Generate Scene with this Enhanced Prompt"):
-            with st.spinner("Generating your 3D scene... (this may take up to a minute)"):
-                # Call API with enhanced prompt
-                response_text, debug_info = asyncio.run(call_anthropic_api(st.session_state.current_enhanced_prompt))
-                
-                if response_text:
-                    # Extract HTML
-                    final_html = extract_html_from_response(response_text)
+        with col1:
+            if st.button("Generate Scene with this Enhanced Prompt"):
+                with st.spinner("Generating your 3D scene... (this may take up to a minute)"):
+                    # Call API with enhanced prompt
+                    response_text, debug_info = asyncio.run(call_anthropic_api(st.session_state.current_enhanced_prompt))
                     
-                    # Save current scene to state
-                    st.session_state.current_scene = {
-                        "prompt": st.session_state.raw_prompt,
-                        "enhanced_prompt": st.session_state.current_enhanced_prompt,
-                        "html": final_html, 
-                        "full_response": response_text,
-                        "is_preset": False
-                    }
-                    # Reset the review stage flag
-                    st.session_state.show_enhanced_complete = False
-                    st.success("Scene generated successfully!")
-                else:
-                    st.error("Failed to generate scene. See Debug tab for details.")
+                    if response_text:
+                        # Extract HTML
+                        final_html = extract_html_from_response(response_text)
+                        
+                        # Save current scene to state
+                        st.session_state.current_scene = {
+                            "prompt": st.session_state.raw_prompt,
+                            "enhanced_prompt": st.session_state.current_enhanced_prompt,
+                            "html": final_html, 
+                            "full_response": response_text,
+                            "is_preset": False
+                        }
+                        # Reset the review stage flag
+                        st.session_state.show_enhanced_complete = False
+                        st.success("Scene generated successfully!")
+                    else:
+                        st.error("Failed to generate scene. See Debug tab for details.")
         
         # Button to go back
-        if st.button("Back to Prompt"):
-            st.session_state.show_enhanced_complete = False
-            st.experimental_rerun()
+        with col2:
+            if st.button("Back to Prompt"):
+                st.session_state.show_enhanced_complete = False
+                st.experimental_rerun()
     
     # If not at review stage, show the form
     else:
@@ -692,7 +690,7 @@ with tab2:
                             st.experimental_rerun()
                 else:
                     # Generate directly with enhanced prompt
-                    with st.spinner("Generating your 3D scene with enhanced details... (this may take up to 2 minutes)"):
+                    with st.spinner("Generating your 3D scene... (this may take up to 2 minutes)"):
                         # Use the two-step process
                         html_content, full_response, enhanced_prompt = asyncio.run(get_custom_scene_with_enhancement(user_prompt))
                         
@@ -711,6 +709,12 @@ with tab2:
 
 with tab3:
     st.subheader("Debug Information")
+    
+    # Add note about token limits
+    st.info("### Note about response limits\n\n"
+            "The API has token limits that can cause issues with complex scenes. "
+            "The system has been modified to request simpler, more concise scenes that are less likely to "
+            "be truncated during generation. If you're seeing incomplete scenes, try simpler descriptions.")
     
     # Show prompt comparison
     if "raw_prompt" in st.session_state and "enhanced_prompt" in st.session_state:
@@ -749,6 +753,20 @@ with tab3:
                     "content_length": len(str(debug_info["response"].get("content", [])))
                 }
                 st.json(simplified_response)
+                
+                # Show content length information
+                if "content" in debug_info["response"] and len(debug_info["response"]["content"]) > 0:
+                    content_text = debug_info["response"]["content"][0]["text"]
+                    st.write(f"Response content length: {len(content_text)} characters")
+                    
+                    # Check for signs of truncation
+                    if not content_text.strip().endswith("</html>"):
+                        st.warning("⚠️ Response appears to be truncated (doesn't end with </html>)")
+                    
+                    # Show the end of the response for debugging
+                    if len(content_text) > 300:
+                        st.write("Last 300 characters of response:")
+                        st.code(content_text[-300:])
 
 # Display current scene if available
 if st.session_state.current_scene:
@@ -786,21 +804,20 @@ st.markdown("""
 
 1. **Preset Scene**: Load the Solar System preset from the first tab
 2. **Custom Scenes**: Describe your own scene in the second tab
-   - Optionally check "Show enhanced prompt" to review the detailed prompt before generation
-3. **Debug Info**: View prompts and API details in the third tab
+   - Keep descriptions simple and concise to avoid token limit issues
+   - Optionally check "Show enhanced prompt" to review before generation
+3. **Debug Info**: View prompt enhancements and API details in the third tab
 4. **Interact** with any scene using your mouse:
    - Left-click + drag: Rotate the camera
    - Right-click + drag: Pan the camera
    - Scroll: Zoom in/out
 5. **Download**: Save the HTML to open in your browser
 
-### About Prompt Enhancement
+### About Token Limits
 
-The prompt enhancer transforms simple descriptions into detailed technical specifications, leading to more sophisticated scenes with:
-- Complex geometries instead of basic shapes
-- Detailed materials and lighting
-- More realistic animations
-- Better organized scene elements
-
-This two-step process helps bridge the gap between simple descriptions and highly detailed Three.js implementations.
+This application works with API token limits that can affect scene generation:
+- Complex scenes may be truncated if they exceed these limits
+- The app has been optimized to generate simpler, complete scenes
+- For best results, use concise descriptions focusing on core elements
+- Check the Debug tab if your scene doesn't render correctly
 """)
