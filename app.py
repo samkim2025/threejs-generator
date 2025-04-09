@@ -25,259 +25,7 @@ if "raw_prompt" not in st.session_state:
 if "enhanced_prompt" not in st.session_state:
     st.session_state.enhanced_prompt = ""
 
-# Pre-built scenes (keeping the existing code)
-def get_rabbit_turtle_scene():
-    return """
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>Rabbit and Turtle Running on a Hill</title>
-        <style>
-            body { margin: 0; overflow: hidden; }
-            #info {
-                position: absolute;
-                top: 10px;
-                width: 100%;
-                text-align: center;
-                color: white;
-                font-family: Arial, sans-serif;
-                pointer-events: none;
-                text-shadow: 1px 1px 1px black;
-            }
-        </style>
-    </head>
-    <body>
-        <div id="info">Rabbit and Turtle Running on a Hill - Use mouse to navigate</div>
-        <script src="https://unpkg.com/three@0.137.0/build/three.min.js"></script>
-        <script src="https://unpkg.com/three@0.137.0/examples/js/controls/OrbitControls.js"></script>
-        <script>
-            // Create a scene
-            const scene = new THREE.Scene();
-            scene.background = new THREE.Color(0x87CEEB); // Sky blue background
-
-            // Create a camera
-            const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-            camera.position.set(0, 5, 10);
-            camera.lookAt(0, 0, 0);
-
-            // Create a renderer
-            const renderer = new THREE.WebGLRenderer({ antialias: true });
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.shadowMap.enabled = true;
-            document.body.appendChild(renderer.domElement);
-
-            // Add orbit controls
-            const controls = new THREE.OrbitControls(camera, renderer.domElement);
-            controls.enableDamping = true;
-            controls.dampingFactor = 0.05;
-
-            // Add ambient light
-            const ambientLight = new THREE.AmbientLight(0x404040);
-            scene.add(ambientLight);
-
-            // Create a directional light
-            const light = new THREE.DirectionalLight(0xffffff, 1);
-            light.position.set(0, 10, 5);
-            light.castShadow = true;
-            light.shadow.mapSize.width = 2048;
-            light.shadow.mapSize.height = 2048;
-            scene.add(light);
-
-            // Create a hill
-            const hillGeometry = new THREE.CylinderGeometry(8, 8, 2, 32, 1, false);
-            const hillMaterial = new THREE.MeshPhongMaterial({ color: 0x7CFC00 });
-            const hill = new THREE.Mesh(hillGeometry, hillMaterial);
-            hill.position.y = -1;
-            hill.receiveShadow = true;
-            scene.add(hill);
-
-            // Create a path around the hill
-            const pathGeometry = new THREE.TorusGeometry(6, 0.3, 16, 100);
-            const pathMaterial = new THREE.MeshPhongMaterial({ color: 0x8B4513 });
-            const path = new THREE.Mesh(pathGeometry, pathMaterial);
-            path.rotation.x = Math.PI / 2;
-            path.position.y = 0.05;
-            path.receiveShadow = true;
-            scene.add(path);
-
-            // Create a rabbit using basic geometries
-            function createRabbit() {
-                const rabbit = new THREE.Group();
-                
-                // Rabbit body
-                const bodyGeometry = new THREE.SphereGeometry(0.5, 16, 16);
-                const bodyMaterial = new THREE.MeshPhongMaterial({ color: 0xFFFFFF });
-                const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
-                body.castShadow = true;
-                rabbit.add(body);
-                
-                // Rabbit head
-                const headGeometry = new THREE.SphereGeometry(0.3, 16, 16);
-                const headMaterial = new THREE.MeshPhongMaterial({ color: 0xFFFFFF });
-                const head = new THREE.Mesh(headGeometry, headMaterial);
-                head.position.set(0, 0.4, 0.3);
-                head.castShadow = true;
-                rabbit.add(head);
-                
-                // Rabbit ears
-                const earGeometry = new THREE.CylinderGeometry(0.05, 0.05, 0.5, 12);
-                const earMaterial = new THREE.MeshPhongMaterial({ color: 0xFFCCCC });
-                
-                const leftEar = new THREE.Mesh(earGeometry, earMaterial);
-                leftEar.position.set(-0.1, 0.7, 0.3);
-                leftEar.rotation.set(0, 0, -0.2);
-                leftEar.castShadow = true;
-                rabbit.add(leftEar);
-                
-                const rightEar = new THREE.Mesh(earGeometry, earMaterial);
-                rightEar.position.set(0.1, 0.7, 0.3);
-                rightEar.rotation.set(0, 0, 0.2);
-                rightEar.castShadow = true;
-                rabbit.add(rightEar);
-                
-                // Rabbit tail
-                const tailGeometry = new THREE.SphereGeometry(0.15, 16, 16);
-                const tailMaterial = new THREE.MeshPhongMaterial({ color: 0xFFFFFF });
-                const tail = new THREE.Mesh(tailGeometry, tailMaterial);
-                tail.position.set(0, 0, -0.5);
-                tail.castShadow = true;
-                rabbit.add(tail);
-                
-                // Rabbit legs
-                const legGeometry = new THREE.CylinderGeometry(0.05, 0.05, 0.4, 12);
-                const legMaterial = new THREE.MeshPhongMaterial({ color: 0xFFFFFF });
-                
-                const frontLeftLeg = new THREE.Mesh(legGeometry, legMaterial);
-                frontLeftLeg.position.set(-0.2, -0.4, 0.2);
-                frontLeftLeg.castShadow = true;
-                rabbit.add(frontLeftLeg);
-                
-                const frontRightLeg = new THREE.Mesh(legGeometry, legMaterial);
-                frontRightLeg.position.set(0.2, -0.4, 0.2);
-                frontRightLeg.castShadow = true;
-                rabbit.add(frontRightLeg);
-                
-                const backLeftLeg = new THREE.Mesh(legGeometry, legMaterial);
-                backLeftLeg.position.set(-0.2, -0.4, -0.2);
-                backLeftLeg.castShadow = true;
-                rabbit.add(backLeftLeg);
-                
-                const backRightLeg = new THREE.Mesh(legGeometry, legMaterial);
-                backRightLeg.position.set(0.2, -0.4, -0.2);
-                backRightLeg.castShadow = true;
-                rabbit.add(backRightLeg);
-                
-                return rabbit;
-            }
-
-            // Create a turtle using basic geometries
-            function createTurtle() {
-                const turtle = new THREE.Group();
-                
-                // Turtle shell
-                const shellGeometry = new THREE.SphereGeometry(0.5, 16, 16, 0, Math.PI * 2, 0, Math.PI / 2);
-                const shellMaterial = new THREE.MeshPhongMaterial({ color: 0x006400 });
-                const shell = new THREE.Mesh(shellGeometry, shellMaterial);
-                shell.rotation.x = Math.PI / 2;
-                shell.castShadow = true;
-                turtle.add(shell);
-                
-                // Turtle head
-                const headGeometry = new THREE.SphereGeometry(0.2, 16, 16);
-                const headMaterial = new THREE.MeshPhongMaterial({ color: 0x8B4513 });
-                const head = new THREE.Mesh(headGeometry, headMaterial);
-                head.position.set(0, 0, 0.6);
-                head.castShadow = true;
-                turtle.add(head);
-                
-                // Turtle legs
-                const legGeometry = new THREE.CylinderGeometry(0.08, 0.08, 0.3, 12);
-                const legMaterial = new THREE.MeshPhongMaterial({ color: 0x8B4513 });
-                
-                const frontLeftLeg = new THREE.Mesh(legGeometry, legMaterial);
-                frontLeftLeg.position.set(-0.3, 0, 0.3);
-                frontLeftLeg.rotation.x = Math.PI / 2;
-                frontLeftLeg.castShadow = true;
-                turtle.add(frontLeftLeg);
-                
-                const frontRightLeg = new THREE.Mesh(legGeometry, legMaterial);
-                frontRightLeg.position.set(0.3, 0, 0.3);
-                frontRightLeg.rotation.x = Math.PI / 2;
-                frontRightLeg.castShadow = true;
-                turtle.add(frontRightLeg);
-                
-                const backLeftLeg = new THREE.Mesh(legGeometry, legMaterial);
-                backLeftLeg.position.set(-0.3, 0, -0.3);
-                backLeftLeg.rotation.x = Math.PI / 2;
-                backLeftLeg.castShadow = true;
-                turtle.add(backLeftLeg);
-                
-                const backRightLeg = new THREE.Mesh(legGeometry, legMaterial);
-                backRightLeg.position.set(0.3, 0, -0.3);
-                backRightLeg.rotation.x = Math.PI / 2;
-                backRightLeg.castShadow = true;
-                turtle.add(backRightLeg);
-                
-                return turtle;
-            }
-
-            // Create and position the rabbit and turtle
-            const rabbit = createRabbit();
-            rabbit.position.set(-4, 0.5, 0);
-            rabbit.scale.set(0.8, 0.8, 0.8);
-            scene.add(rabbit);
-
-            const turtle = createTurtle();
-            turtle.position.set(-2, 0.3, 0);
-            turtle.scale.set(0.8, 0.8, 0.8);
-            scene.add(turtle);
-
-            // Animation variables
-            let rabbitAngle = 0;
-            let turtleAngle = Math.PI / 4; // Start the turtle at a different position
-            const rabbitSpeed = 0.03;
-            const turtleSpeed = 0.01;
-            let rabbitHop = 0;
-
-            // Handle window resize
-            window.addEventListener('resize', function() {
-                camera.aspect = window.innerWidth / window.innerHeight;
-                camera.updateProjectionMatrix();
-                renderer.setSize(window.innerWidth, window.innerHeight);
-            });
-
-            // Animation loop
-            function animate() {
-                requestAnimationFrame(animate);
-
-                // Update controls
-                controls.update();
-
-                // Update rabbit position - move faster in a circle
-                rabbitAngle += rabbitSpeed;
-                rabbit.position.x = Math.sin(rabbitAngle) * 6;
-                rabbit.position.z = Math.cos(rabbitAngle) * 6;
-                rabbit.rotation.y = -rabbitAngle - Math.PI / 2;
-                
-                // Make the rabbit hop
-                rabbitHop += 0.1;
-                rabbit.position.y = 0.5 + Math.abs(Math.sin(rabbitHop)) * 0.3;
-
-                // Update turtle position - move slower in a circle
-                turtleAngle += turtleSpeed;
-                turtle.position.x = Math.sin(turtleAngle) * 6;
-                turtle.position.z = Math.cos(turtleAngle) * 6;
-                turtle.rotation.y = -turtleAngle - Math.PI / 2;
-
-                // Render the scene
-                renderer.render(scene, camera);
-            }
-            animate();
-        </script>
-    </body>
-    </html>
-    """
-
+# Pre-built scenes (only solar system)
 def get_solar_system_scene():
     return """
     <!DOCTYPE html>
@@ -489,303 +237,10 @@ def get_solar_system_scene():
     </html>
     """
 
-def get_forest_scene():
-    return """
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>Forest Scene</title>
-        <style>
-            body { margin: 0; overflow: hidden; }
-            #info {
-                position: absolute;
-                top: 10px;
-                width: 100%;
-                text-align: center;
-                color: white;
-                font-family: Arial, sans-serif;
-                pointer-events: none;
-                text-shadow: 1px 1px 1px black;
-            }
-        </style>
-    </head>
-    <body>
-        <div id="info">Forest Scene - Use mouse to navigate</div>
-        <script src="https://unpkg.com/three@0.137.0/build/three.min.js"></script>
-        <script src="https://unpkg.com/three@0.137.0/examples/js/controls/OrbitControls.js"></script>
-        <script>
-            // Create scene
-            const scene = new THREE.Scene();
-            scene.background = new THREE.Color(0x87CEEB);
-            
-            // Create camera
-            const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-            camera.position.set(0, 5, 15);
-            camera.lookAt(0, 0, 0);
-            
-            // Create renderer
-            const renderer = new THREE.WebGLRenderer({ antialias: true });
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.shadowMap.enabled = true;
-            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-            document.body.appendChild(renderer.domElement);
-            
-            // Add orbit controls
-            const controls = new THREE.OrbitControls(camera, renderer.domElement);
-            controls.enableDamping = true;
-            controls.dampingFactor = 0.05;
-            controls.maxPolarAngle = Math.PI / 2;
-            
-            // Add lights
-            const ambientLight = new THREE.AmbientLight(0x404040, 0.5);
-            scene.add(ambientLight);
-            
-            const dirLight = new THREE.DirectionalLight(0xFFFFFF, 1);
-            dirLight.position.set(10, 10, 10);
-            dirLight.castShadow = true;
-            dirLight.shadow.mapSize.width = 2048;
-            dirLight.shadow.mapSize.height = 2048;
-            dirLight.shadow.camera.near = 0.5;
-            dirLight.shadow.camera.far = 50;
-            dirLight.shadow.camera.left = -20;
-            dirLight.shadow.camera.right = 20;
-            dirLight.shadow.camera.top = 20;
-            dirLight.shadow.camera.bottom = -20;
-            scene.add(dirLight);
-            
-            // Create ground
-            const groundGeometry = new THREE.PlaneGeometry(50, 50);
-            const groundMaterial = new THREE.MeshStandardMaterial({
-                color: 0x458B00,
-                roughness: 0.8
-            });
-            const ground = new THREE.Mesh(groundGeometry, groundMaterial);
-            ground.rotation.x = -Math.PI / 2;
-            ground.receiveShadow = true;
-            scene.add(ground);
-            
-            // Create lake
-            const lakeGeometry = new THREE.CircleGeometry(5, 32);
-            const lakeMaterial = new THREE.MeshStandardMaterial({
-                color: 0x4682B4,
-                roughness: 0.2,
-                metalness: 0.8
-            });
-            const lake = new THREE.Mesh(lakeGeometry, lakeMaterial);
-            lake.rotation.x = -Math.PI / 2;
-            lake.position.set(-5, 0.01, 2);
-            scene.add(lake);
-            
-            // Create tree function
-            function createTree(x, z) {
-                const tree = new THREE.Group();
-                
-                // Tree trunk
-                const trunkGeometry = new THREE.CylinderGeometry(0.2, 0.3, 1.5, 8);
-                const trunkMaterial = new THREE.MeshStandardMaterial({
-                    color: 0x8B4513,
-                    roughness: 0.9
-                });
-                const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
-                trunk.position.y = 0.75;
-                trunk.castShadow = true;
-                trunk.receiveShadow = true;
-                tree.add(trunk);
-                
-                // Tree foliage
-                const foliageGeometry = new THREE.ConeGeometry(1, 2, 8);
-                const foliageMaterial = new THREE.MeshStandardMaterial({
-                    color: 0x228B22,
-                    roughness: 0.8
-                });
-                
-                const foliage1 = new THREE.Mesh(foliageGeometry, foliageMaterial);
-                foliage1.position.y = 2;
-                foliage1.castShadow = true;
-                tree.add(foliage1);
-                
-                const foliage2 = new THREE.Mesh(foliageGeometry, foliageMaterial);
-                foliage2.position.y = 2.6;
-                foliage2.scale.set(0.8, 0.8, 0.8);
-                foliage2.castShadow = true;
-                tree.add(foliage2);
-                
-                const foliage3 = new THREE.Mesh(foliageGeometry, foliageMaterial);
-                foliage3.position.y = 3.1;
-                foliage3.scale.set(0.6, 0.6, 0.6);
-                foliage3.castShadow = true;
-                tree.add(foliage3);
-                
-                tree.position.set(x, 0, z);
-                return tree;
-            }
-            
-            // Create multiple trees
-            for (let i = 0; i < 30; i++) {
-                const x = THREE.MathUtils.randFloatSpread(40);
-                const z = THREE.MathUtils.randFloatSpread(40);
-                
-                // Don't place trees in the lake
-                const distanceToLake = Math.sqrt(Math.pow(x + 5, 2) + Math.pow(z - 2, 2));
-                if (distanceToLake > 5) {
-                    const scale = 0.5 + Math.random() * 1.5;
-                    const tree = createTree(x, z);
-                    tree.scale.set(scale, scale, scale);
-                    scene.add(tree);
-                }
-            }
-            
-            // Create bird
-            function createBird() {
-                const bird = new THREE.Group();
-                
-                // Bird body
-                const bodyGeometry = new THREE.SphereGeometry(0.2, 16, 16);
-                const bodyMaterial = new THREE.MeshStandardMaterial({
-                    color: 0xE74C3C,
-                    roughness: 0.8
-                });
-                const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
-                body.castShadow = true;
-                bird.add(body);
-                
-                // Bird head
-                const headGeometry = new THREE.SphereGeometry(0.12, 16, 16);
-                const headMaterial = new THREE.MeshStandardMaterial({
-                    color: 0xE74C3C,
-                    roughness: 0.8
-                });
-                const head = new THREE.Mesh(headGeometry, headMaterial);
-                head.position.set(0.15, 0.08, 0);
-                head.castShadow = true;
-                bird.add(head);
-                
-                // Bird wings
-                const wingGeometry = new THREE.PlaneGeometry(0.3, 0.15);
-                const wingMaterial = new THREE.MeshStandardMaterial({
-                    color: 0xE74C3C,
-                    roughness: 0.8,
-                    side: THREE.DoubleSide
-                });
-                
-                const leftWing = new THREE.Mesh(wingGeometry, wingMaterial);
-                leftWing.position.set(0, 0.1, 0.15);
-                leftWing.rotation.y = Math.PI / 2;
-                leftWing.castShadow = true;
-                bird.add(leftWing);
-                
-                const rightWing = new THREE.Mesh(wingGeometry, wingMaterial);
-                rightWing.position.set(0, 0.1, -0.15);
-                rightWing.rotation.y = Math.PI / 2;
-                rightWing.castShadow = true;
-                bird.add(rightWing);
-                
-                // Bird tail
-                const tailGeometry = new THREE.PlaneGeometry(0.15, 0.1);
-                const tailMaterial = new THREE.MeshStandardMaterial({
-                    color: 0xE74C3C,
-                    roughness: 0.8,
-                    side: THREE.DoubleSide
-                });
-                const tail = new THREE.Mesh(tailGeometry, tailMaterial);
-                tail.position.set(-0.2, 0, 0);
-                tail.rotation.y = Math.PI / 2;
-                tail.castShadow = true;
-                bird.add(tail);
-                
-                return bird;
-            }
-            
-            // Create multiple birds
-            const birds = [];
-            for (let i = 0; i < 10; i++) {
-                const bird = createBird();
-                const x = THREE.MathUtils.randFloatSpread(30);
-                const y = 5 + Math.random() * 5;
-                const z = THREE.MathUtils.randFloatSpread(30);
-                bird.position.set(x, y, z);
-                bird.userData = {
-                    speed: 0.02 + Math.random() * 0.05,
-                    direction: new THREE.Vector3(
-                        THREE.MathUtils.randFloatSpread(2),
-                        THREE.MathUtils.randFloatSpread(1),
-                        THREE.MathUtils.randFloatSpread(2)
-                    ).normalize(),
-                    wingDirection: 1,
-                    wingSpeed: 0.2
-                };
-                birds.push(bird);
-                scene.add(bird);
-            }
-            
-            // Handle window resize
-            window.addEventListener('resize', function() {
-                camera.aspect = window.innerWidth / window.innerHeight;
-                camera.updateProjectionMatrix();
-                renderer.setSize(window.innerWidth, window.innerHeight);
-            });
-            
-            // Animation loop
-            function animate() {
-                requestAnimationFrame(animate);
-                
-                // Update controls
-                controls.update();
-                
-                // Animate birds
-                birds.forEach(bird => {
-                    // Move the bird
-                    bird.position.x += bird.userData.direction.x * bird.userData.speed;
-                    bird.position.y += bird.userData.direction.y * bird.userData.speed;
-                    bird.position.z += bird.userData.direction.z * bird.userData.speed;
-                    
-                    // Rotate bird to face direction of movement
-                    bird.lookAt(
-                        bird.position.x + bird.userData.direction.x,
-                        bird.position.y + bird.userData.direction.y,
-                        bird.position.z + bird.userData.direction.z
-                    );
-                    
-                    // Flap wings
-                    bird.children[2].rotation.z += bird.userData.wingDirection * bird.userData.wingSpeed;
-                    bird.children[3].rotation.z -= bird.userData.wingDirection * bird.userData.wingSpeed;
-                    
-                    if (Math.abs(bird.children[2].rotation.z) > 1) {
-                        bird.userData.wingDirection *= -1;
-                    }
-                    
-                    // Check if bird reaches the boundary
-                    const bounds = 20;
-                    if (
-                        Math.abs(bird.position.x) > bounds ||
-                        bird.position.y < 2 ||
-                        bird.position.y > 15 ||
-                        Math.abs(bird.position.z) > bounds
-                    ) {
-                        // Change direction
-                        bird.userData.direction.set(
-                            -bird.userData.direction.x + THREE.MathUtils.randFloatSpread(0.5),
-                            -bird.userData.direction.y * 0.5 + THREE.MathUtils.randFloatSpread(0.5),
-                            -bird.userData.direction.z + THREE.MathUtils.randFloatSpread(0.5)
-                        ).normalize();
-                    }
-                });
-                
-                // Render the scene
-                renderer.render(scene, camera);
-            }
-            
-            // Start animation
-            animate();
-        </script>
-    </body>
-    </html>
-    """
-
 # Get API key (using environment variable rather than secrets for simplicity)
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 
-# NEW: Prompt enhancement function
+# Prompt enhancement function
 async def enhance_prompt(basic_prompt):
     """Takes a simple prompt and expands it with detailed Three.js specifications"""
     try:
@@ -855,39 +310,22 @@ async def call_anthropic_api(prompt):
             "anthropic-version": "2023-06-01"
         }
         
-        # Improved system prompt with more detailed guidance
+        # Improved system prompt with more directive guidance
         system_prompt = """You are an expert in Three.js 3D scene creation.
 
-Your task is to generate a complete, standalone HTML document with an interactive Three.js scene based on the user's description.
+Your task is to generate a working, standalone HTML document with a Three.js scene based on the user's description.
 
-Create a fully detailed scene with:
+Important requirements:
+1. The output must be a COMPLETE and VALID HTML document
+2. Include the necessary Three.js library and OrbitControls
+3. Create a scene that works without external resources
+4. Implement the scene exactly as described by the user
+5. Include proper camera controls, lighting, and animation
+6. Make sure all code is properly closed and syntactically correct
 
-1. Complex geometries broken down into component parts (not just basic shapes)
-2. Group objects for composite entities (like characters, vehicles, buildings)
-3. Detailed materials with appropriate properties (roughness, metalness, etc.)
-4. Multiple light sources with shadows and proper intensity
-5. Dynamic animations that bring the scene to life
-6. Camera controls that allow exploring the scene
-7. Proper scaling and positioning of all elements
-8. A sky/background that fits the scene's theme
-9. Proper coding structure with well-named functions and variables
-10. Performance optimizations like object instancing where appropriate
-
-When creating objects:
-- Use groups and subgroups for complex objects
-- Add fine details to make objects recognizable
-- Use appropriate materials with realistic properties
-- Position objects thoughtfully in the scene
-
-For animations:
-- Create smooth, natural movements
-- Use sine/cosine for organic motion
-- Add small random variations for realism
-- Animate multiple properties (position, rotation, scale)
-
-Implement everything as a single, complete HTML file using Three.js version 0.137.0.
-Do not use external assets or textures - create everything programmatically.
-Include ONLY the code with no explanations."""
+DO NOT include explanations or markdown - ONLY output the full HTML document.
+DO NOT truncate your response - I need the COMPLETE HTML file.
+Your response should START with <!DOCTYPE html> and END with </html>."""
         
         data = {
             "model": "claude-3-opus-20240229",
@@ -895,7 +333,14 @@ Include ONLY the code with no explanations."""
             "temperature": 0.2,
             "system": system_prompt,
             "messages": [
-                {"role": "user", "content": f"Create a complete Three.js scene with: {prompt}. Return ONLY HTML code with no explanations. Make it visually impressive with detailed geometries and animations."}
+                {"role": "user", "content": f"""Create a complete Three.js scene based on this description: {prompt}
+
+Return ONLY a working HTML document (not HTML fragments).
+Do not include any explanation or markdown formatting.
+The document should include ALL necessary scripts, styles, and code.
+It must be a COMPLETE, STANDALONE HTML file that I can save and run directly in a browser.
+
+Your response must start with <!DOCTYPE html> and contain a complete, working Three.js scene."""}
             ]
         }
         
@@ -937,67 +382,32 @@ Include ONLY the code with no explanations."""
         }
         return None, debug_info
 
-# Improved code extraction
+# Improved HTML extraction - focusing on getting a complete document
 def extract_html_from_response(response_text):
-    # First, try to find complete HTML document using standard markers
+    # Look for complete HTML document
     html_pattern = r"<!DOCTYPE html>[\s\S]*?<\/html>"
     html_matches = re.search(html_pattern, response_text, re.IGNORECASE)
     
     if html_matches:
         return html_matches.group(0)
     
-    # If no complete document found, try to find HTML within code blocks
+    # If no complete document, look for code blocks
     code_block_pattern = r"```(?:html)?([\s\S]*?)```"
-    code_matches = re.search(code_block_pattern, response_text)
+    code_matches = re.findall(code_block_pattern, response_text)
     
     if code_matches:
-        code = code_matches.group(1).strip()
+        # Check if any code block contains complete HTML
+        for code in code_matches:
+            code = code.strip()
+            if code.lower().startswith("<!doctype html>") or code.lower().startswith("<html"):
+                # This looks like a complete HTML document
+                return code
         
-        # Check if the extracted code already contains HTML structure
-        if code.strip().startswith("<!DOCTYPE") or code.strip().startswith("<html"):
-            return code
+        # If no complete HTML found in code blocks, use the first block and wrap it
+        html_content = code_matches[0].strip()
         
-        # Otherwise wrap it with HTML structure
-        return f"""
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <meta charset="utf-8">
-            <title>Generated Three.js Scene</title>
-            <style>
-                body {{ margin: 0; overflow: hidden; }}
-                #info {{
-                    position: absolute;
-                    top: 10px;
-                    width: 100%;
-                    text-align: center;
-                    color: white;
-                    font-family: Arial, sans-serif;
-                    pointer-events: none;
-                    text-shadow: 1px 1px 1px black;
-                }}
-            </style>
-        </head>
-        <body>
-            <div id="info">Generated Three.js Scene - Use mouse to navigate</div>
-            <script src="https://unpkg.com/three@0.137.0/build/three.min.js"></script>
-            <script src="https://unpkg.com/three@0.137.0/examples/js/controls/OrbitControls.js"></script>
-            {code}
-        </body>
-        </html>
-        """
-    
-    # If all else fails, try to extract any code-like content
-    # Look for JavaScript-like content with typical Three.js patterns
-    js_patterns = [
-        r"const scene = new THREE\.Scene\(\);",
-        r"new THREE\.(\w+)\(",
-        r"renderer\.render\(scene, camera\);"
-    ]
-    
-    for pattern in js_patterns:
-        if re.search(pattern, response_text):
-            # Found some Three.js code, wrap it properly
+        # If it contains script tag but no HTML structure, wrap it properly
+        if "<script>" in html_content and not (html_content.lower().startswith("<!doctype") or html_content.lower().startswith("<html")):
             return f"""
             <!DOCTYPE html>
             <html>
@@ -1022,14 +432,52 @@ def extract_html_from_response(response_text):
                 <div id="info">Generated Three.js Scene - Use mouse to navigate</div>
                 <script src="https://unpkg.com/three@0.137.0/build/three.min.js"></script>
                 <script src="https://unpkg.com/three@0.137.0/examples/js/controls/OrbitControls.js"></script>
-                <script>
-                {response_text}
-                </script>
+                {html_content}
             </body>
             </html>
             """
+        else:
+            return html_content
     
-    # Last resort fallback - just wrap the entire response
+    # If we still don't have HTML, look for Three.js specific code in the response
+    if "new THREE." in response_text:
+        # Extract all text from response and wrap it in a proper document
+        js_code = response_text.strip()
+        
+        # Ensure it's wrapped in script tags if not already
+        if not js_code.startswith("<script>"):
+            js_code = f"<script>\n{js_code}\n</script>"
+        
+        return f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <title>Generated Three.js Scene</title>
+            <style>
+                body {{ margin: 0; overflow: hidden; }}
+                #info {{
+                    position: absolute;
+                    top: 10px;
+                    width: 100%;
+                    text-align: center;
+                    color: white;
+                    font-family: Arial, sans-serif;
+                    pointer-events: none;
+                    text-shadow: 1px 1px 1px black;
+                }}
+            </style>
+        </head>
+        <body>
+            <div id="info">Generated Three.js Scene - Use mouse to navigate</div>
+            <script src="https://unpkg.com/three@0.137.0/build/three.min.js"></script>
+            <script src="https://unpkg.com/three@0.137.0/examples/js/controls/OrbitControls.js"></script>
+            {js_code}
+        </body>
+        </html>
+        """
+    
+    # Last resort fallback - create a basic scene template with a message
     return f"""
     <!DOCTYPE html>
     <html>
@@ -1051,12 +499,13 @@ def extract_html_from_response(response_text):
         </style>
     </head>
     <body>
-        <div id="info">Generated Three.js Scene - Use mouse to navigate</div>
+        <div id="info">Generated Three.js Scene - Could not parse response properly</div>
         <script src="https://unpkg.com/three@0.137.0/build/three.min.js"></script>
         <script src="https://unpkg.com/three@0.137.0/examples/js/controls/OrbitControls.js"></script>
         <script>
         // Scene setup
         const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x335577);
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
         const renderer = new THREE.WebGLRenderer();
         renderer.setSize(window.innerWidth, window.innerHeight);
@@ -1077,22 +526,39 @@ def extract_html_from_response(response_text):
         dirLight.castShadow = true;
         scene.add(dirLight);
         
-        // Parse and attempt to create objects from the response
-        try {{
-            {response_text}
-        }} catch (e) {{
-            console.error("Error processing response:", e);
-            // Create a fallback object
-            const geometry = new THREE.SphereGeometry(2, 32, 32);
-            const material = new THREE.MeshPhongMaterial({{ color: 0xff0000 }});
-            const sphere = new THREE.Mesh(geometry, material);
-            sphere.castShadow = true;
-            scene.add(sphere);
-        }}
+        // Fallback object with user prompt text
+        const geometry = new THREE.BoxGeometry(5, 1, 5);
+        const material = new THREE.MeshPhongMaterial({{ color: 0xff4444 }});
+        const cube = new THREE.Mesh(geometry, material);
+        cube.castShadow = true;
+        cube.position.y = 0.5;
+        scene.add(cube);
         
-        // Animation
+        // Add text showing the scene couldn't be generated
+        const canvas = document.createElement('canvas');
+        canvas.width = 512;
+        canvas.height = 256;
+        const context = canvas.getContext('2d');
+        context.fillStyle = '#ffffff';
+        context.fillRect(0, 0, canvas.width, canvas.height);
+        context.font = 'Bold 36px Arial';
+        context.fillStyle = '#000000';
+        context.textAlign = 'center';
+        context.fillText('Scene generation error', canvas.width/2, canvas.height/2 - 20);
+        context.font = '24px Arial';
+        context.fillText('See debug info for details', canvas.width/2, canvas.height/2 + 20);
+        
+        const texture = new THREE.CanvasTexture(canvas);
+        const textGeometry = new THREE.PlaneGeometry(4, 2);
+        const textMaterial = new THREE.MeshBasicMaterial({{ map: texture, side: THREE.DoubleSide }});
+        const textMesh = new THREE.Mesh(textGeometry, textMaterial);
+        textMesh.position.set(0, 2, 0);
+        scene.add(textMesh);
+        
+        // Animation loop
         function animate() {{
             requestAnimationFrame(animate);
+            cube.rotation.y += 0.01;
             controls.update();
             renderer.render(scene, camera);
         }}
@@ -1109,7 +575,7 @@ def extract_html_from_response(response_text):
     </html>
     """
 
-# NEW: Get custom scene with prompt enhancement
+# Get custom scene with prompt enhancement
 async def get_custom_scene_with_enhancement(basic_prompt):
     """Generate a Three.js scene using two-step process with prompt enhancement"""
     
@@ -1143,27 +609,17 @@ st.title("🎮 Three.js Scene Generator")
 tab1, tab2, tab3 = st.tabs(["Preset Scenes", "Custom Scene Generator", "Debug Info"])
 
 with tab1:
-    st.subheader("Select a Pre-built Scene")
+    st.subheader("Solar System Preset")
     
-    preset_options = {
-        "Rabbit & Turtle": get_rabbit_turtle_scene,
-        "Solar System": get_solar_system_scene,
-        "Forest Scene": get_forest_scene
-    }
-    
-    selected_preset = st.selectbox(
-        "Choose a scene:",
-        list(preset_options.keys())
-    )
-    
-    if st.button("Load Preset Scene", key="load_preset"):
-        scene_html = preset_options[selected_preset]()
+    # Only including the Solar System preset option
+    if st.button("Load Solar System Scene", key="load_preset"):
+        scene_html = get_solar_system_scene()
         st.session_state.current_scene = {
-            "prompt": selected_preset,
+            "prompt": "Solar System",
             "html": scene_html,
             "is_preset": True
         }
-        st.success(f"Loaded {selected_preset} scene!")
+        st.success("Loaded Solar System scene!")
 
 with tab2:
     st.subheader("Generate Custom Scene")
@@ -1197,18 +653,18 @@ with tab2:
                         if st.button("Continue with this enhanced prompt"):
                             with st.spinner("Generating your 3D scene... (this may take up to a minute)"):
                                 # Call API with enhanced prompt
-                                html_content, full_response = asyncio.run(call_anthropic_api(enhanced_prompt))
+                                response_text, debug_info = asyncio.run(call_anthropic_api(enhanced_prompt))
                                 
-                                if html_content:
+                                if response_text:
                                     # Extract HTML
-                                    final_html = extract_html_from_response(html_content)
+                                    final_html = extract_html_from_response(response_text)
                                     
                                     # Save current scene to state
                                     st.session_state.current_scene = {
                                         "prompt": user_prompt,
                                         "enhanced_prompt": enhanced_prompt,
                                         "html": final_html, 
-                                        "full_response": full_response,
+                                        "full_response": response_text,
                                         "is_preset": False
                                     }
                                     st.success("Scene generated successfully!")
@@ -1308,7 +764,7 @@ st.markdown("---")
 st.markdown("""
 ### Instructions
 
-1. **Preset Scenes**: Choose from pre-built scenes in the first tab
+1. **Preset Scene**: Load the Solar System preset from the first tab
 2. **Custom Scenes**: Describe your own scene in the second tab
    - Optionally check "Show enhanced prompt" to review the detailed prompt before generation
 3. **Debug Info**: View prompts and API details in the third tab
