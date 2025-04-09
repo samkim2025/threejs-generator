@@ -21,39 +21,57 @@ if "debug_info" not in st.session_state:
 # Get API key
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 
-# Simple prompt enhancer - keep it focused and concise
+# Improved prompt enhancer with examples
 async def enhance_prompt(basic_prompt):
-    """Enhance a basic prompt with more details but keep it focused"""
+    """Enhance a basic prompt with rich details for 3D scene generation"""
     headers = {
         "x-api-key": ANTHROPIC_API_KEY,
         "content-type": "application/json",
         "anthropic-version": "2023-06-01"
     }
     
-    system_prompt = """You enhance simple scene descriptions by adding just enough details to make them visually interesting, but not so many that they become too complex to generate.
-Focus on:
-- Core visual elements
-- Basic materials and colors
-- Simple animations
-- Basic interactions
-Keep your descriptions concise (under 250 words) and focused on what would make an effective Three.js scene."""
+    # Significantly improved system prompt with examples and clear direction
+    system_prompt = """You are an expert at transforming simple scene descriptions into detailed, vivid scene specifications for 3D visualization.
+
+Your task is to expand basic prompts into rich, detailed scene descriptions, adding significant visual details while maintaining the core concept.
+
+Here are examples of the level of enhancement expected:
+
+BASIC: "A cool city with many buildings"
+ENHANCED: "Create a 3D city scene featuring a bustling urban environment with skyscrapers, apartment buildings, and smaller shops lining the streets. Incorporate roads with moving cars, traffic lights, and pedestrian crossings to bring the city to life. Add pedestrians walking on sidewalks and crossing the streets to enhance realism. Include street elements such as lampposts, benches, and trees for a more immersive experience. Utilize dynamic lighting to simulate day and night cycles, and implement basic camera controls to allow users to explore the vibrant cityscape from different perspectives."
+
+BASIC: "A forest with animals"
+ENHANCED: "Create a lush 3D forest scene with dense, varied vegetation including tall pine trees, leafy deciduous trees, and undergrowth of ferns and bushes. Populate the forest with wildlife such as deer grazing in clearings, rabbits hopping between bushes, and birds flying overhead or perched on branches. Include a small stream winding through the forest with rocks and fallen logs. Create dappled lighting effects as sunlight filters through the canopy, with particles representing dust or pollen floating in the light beams. Add ambient sounds of rustling leaves, flowing water, and occasional animal calls to complete the immersive forest experience."
+
+BASIC: "A spaceship flying through asteroids"
+ENHANCED: "Create a dynamic 3D space scene featuring a sleek, futuristic spaceship navigating through a dense asteroid field. The spaceship should have glowing engines, detailed exterior paneling, and occasional thruster bursts as it maneuvers. Surround it with various sized asteroids - from small rocky debris to massive cratered boulders - all slowly rotating and moving through space. Include distant stars and nebulae as background elements to create depth. Add dramatic lighting effects with the nearest star casting harsh shadows across the spaceship and asteroids. Implement particle effects for engine exhaust and small collisions between asteroids. Allow the camera to follow behind the spaceship as it weaves through this hazardous environment, giving viewers a sense of speed and danger."
+
+Your enhancements should:
+1. Add specific visual elements and their attributes (shapes, colors, sizes, materials)
+2. Describe environmental details and atmosphere
+3. Suggest movement and animations
+4. Mention lighting and special effects
+5. Describe spatial relationships between objects
+
+The enhancement should be 150-250 words long and focus entirely on visual appearance and behavior, not implementation details."""
     
     data = {
-        "model": "claude-3-sonnet-20240229",  # Using a smaller model for enhancement
-        "max_tokens": 500,
+        "model": "claude-3-opus-20240229",  # Using Opus for better enhancement
+        "max_tokens": 750,
         "temperature": 0.3,
         "system": system_prompt,
         "messages": [
-            {"role": "user", "content": f"""Enhance this simple 3D scene description by adding more visual details:
+            {"role": "user", "content": f"""Transform this basic 3D scene description:
+
 "{basic_prompt}"
 
-Add details about key visual elements, colors, materials, and simple animations. 
-Keep your enhancement under 250 words, focusing on what would create an effective 3D scene.
-DO NOT include technical implementation details or Three.js specifics - just describe what the scene should look like."""}
+Into a richly detailed scene description similar to the examples in your instructions. 
+Make sure to add significant visual details about objects, environment, lighting, movement, and atmosphere.
+Focus only on what the scene should look like and how it should behave, not on implementation details."""}
         ]
     }
     
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    async with httpx.AsyncClient(timeout=45.0) as client:
         response = await client.post(
             "https://api.anthropic.com/v1/messages",
             json=data,
