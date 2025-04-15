@@ -1,4 +1,4 @@
-streamlit==1.18.0
+streamlit
 httpx==0.25.2
 python-dotenv==1.0.0
 anthropic
