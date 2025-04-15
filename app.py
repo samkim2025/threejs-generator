@@ -1,1240 +1,1535 @@
 import streamlit as st
+import anthropic
 import os
 import re
-import httpx
-import asyncio
-from datetime import datetime
+import json
+import base64
+from dotenv import load_dotenv
+import time
 
-# Page configuration
+# Load environment variables (for local development)
+load_dotenv()
+
+# Get API key (will use secrets in Streamlit Cloud)
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY") or st.secrets.get("ANTHROPIC_API_KEY", "")
+
+if not ANTHROPIC_API_KEY:
+    st.error("ANTHROPIC_API_KEY is not set. Please add it to your Streamlit secrets.")
+    st.stop()
+
+# Initialize Anthropic client
+client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+
+# Set page configuration
 st.set_page_config(
-    page_title="Instant 3D Scene Generator",
+    page_title="AI Three.js Scene Generator",
     page_icon="🎮",
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
-# Initialize session state
+# Session state initialization
+if "history" not in st.session_state:
+    st.session_state.history = []
 if "current_scene" not in st.session_state:
     st.session_state.current_scene = None
-if "debug_info" not in st.session_state:
-    st.session_state.debug_info = {}
+if "active_page" not in st.session_state:
+    st.session_state.active_page = "generator"  # Default to generator page
 
-# Get API key
-ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
-
-# Example mappings with a lion example for animal scenes
-EXAMPLE_MAPPINGS = [
-    {
-        "simple": "A cool city with many buildings",
-        "enhanced": "Create a 3D city scene using Three.js that features a bustling urban environment with skyscrapers, apartment buildings, and smaller shops lining the streets. Incorporate roads with moving cars, traffic lights, and pedestrian crossings to bring the city to life. Add pedestrians walking on sidewalks and crossing the streets to enhance realism. Include street elements such as lampposts, benches, and trees for a more immersive experience. Utilize dynamic lighting to simulate day and night cycles, and implement basic camera controls to allow users to explore the vibrant cityscape from different perspectives."
-    },
-    {
-        "simple": "A lion sitting under a tree in a grassy field",
-        "enhanced": "Create a serene 3D scene featuring a golden-maned lion resting under the shade of a tall acacia tree in an expansive grassy savanna. The scene should include a detailed lion constructed from primitive Three.js shapes (spheres, cylinders, and boxes) with a tawny body, distinctive mane, and relaxed posture. The acacia tree should have a thick trunk and a wide, umbrella-like canopy of leaves providing dappled shade. Surrounding them, tall grass should sway gently in a simulated breeze. Implement a day-night cycle with changing lighting conditions, casting realistic shadows across the scene. Allow users to orbit around the scene with camera controls to view the lion and its environment from different angles."
-    }
-]
-
-# Example HTML for animal scene with lion created from primitives
-LION_EXAMPLE_HTML = """<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lion Under Tree Scene</title>
-    <style>
-        body { margin: 0; overflow: hidden; }
-        canvas { display: block; }
-        #info {
-            position: absolute;
-            top: 10px;
-            width: 100%;
-            text-align: center;
-            color: white;
-            font-family: Arial, sans-serif;
-            pointer-events: none;
-            text-shadow: 1px 1px 1px black;
-        }
-    </style>
-</head>
-<body>
-    <div id="info">Lion Under Tree - Use mouse to navigate</div>
-    <script src="https://unpkg.com/three@0.137.0/build/three.min.js"></script>
-    <script src="https://unpkg.com/three@0.137.0/examples/js/controls/OrbitControls.js"></script>
-    <script>
-        // Scene setup
-        const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x87CEEB);
-        
-        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        camera.position.set(0, 5, 10);
-        
-        const renderer = new THREE.WebGLRenderer({ antialias: true });
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.shadowMap.enabled = true;
-        document.body.appendChild(renderer.domElement);
-        
-        // Orbit controls
-        const controls = new THREE.OrbitControls(camera, renderer.domElement);
-        controls.enableDamping = true;
-        controls.dampingFactor = 0.05;
-        
-        // Lights
-        const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
-        scene.add(ambientLight);
-        
-        const directionalLight = new THREE.DirectionalLight(0xFFFFFF, 1);
-        directionalLight.position.set(5, 8, 5);
-        directionalLight.castShadow = true;
-        directionalLight.shadow.mapSize.width = 1024;
-        directionalLight.shadow.mapSize.height = 1024;
-        scene.add(directionalLight);
-        
-        // Ground
-        const groundGeometry = new THREE.PlaneGeometry(100, 100);
-        const groundMaterial = new THREE.MeshStandardMaterial({ color: 0x8B4513 });
-        const ground = new THREE.Mesh(groundGeometry, groundMaterial);
-        ground.rotation.x = -Math.PI / 2;
-        ground.receiveShadow = true;
-        scene.add(ground);
-        
-        // Grass
-        const grassGeometry = new THREE.PlaneGeometry(100, 100, 50, 50);
-        const grassMaterial = new THREE.MeshStandardMaterial({ 
-            color: 0x7CFC00,
-            roughness: 0.8
-        });
-        const grass = new THREE.Mesh(grassGeometry, grassMaterial);
-        grass.rotation.x = -Math.PI / 2;
-        grass.position.y = 0.05;
-        grass.receiveShadow = true;
-        scene.add(grass);
-        
-        // Tree
-        function createTree(x, z) {
-            const treeGroup = new THREE.Group();
-            
-            // Trunk
-            const trunkGeometry = new THREE.CylinderGeometry(0.5, 0.8, 5, 8);
-            const trunkMaterial = new THREE.MeshStandardMaterial({ color: 0x8B4513 });
-            const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
-            trunk.position.y = 2.5;
-            trunk.castShadow = true;
-            trunk.receiveShadow = true;
-            treeGroup.add(trunk);
-            
-            // Canopy
-            const canopyGeometry = new THREE.SphereGeometry(4, 16, 16);
-            const canopyMaterial = new THREE.MeshStandardMaterial({ color: 0x228B22 });
-            const canopy = new THREE.Mesh(canopyGeometry, canopyMaterial);
-            canopy.position.y = 7;
-            canopy.scale.y = 0.7;
-            canopy.castShadow = true;
-            treeGroup.add(canopy);
-            
-            treeGroup.position.set(x, 0, z);
-            scene.add(treeGroup);
-            
-            return treeGroup;
-        }
-        
-        const tree = createTree(3, 2);
-        
-        // Create lion using primitives
-        function createLion() {
-            const lionGroup = new THREE.Group();
-            
-            // Body
-            const bodyGeometry = new THREE.SphereGeometry(1, 16, 16);
-            const bodyMaterial = new THREE.MeshStandardMaterial({ color: 0xC2B280 });
-            const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
-            body.scale.set(1.2, 1, 1.5);
-            body.position.y = 1.1;
-            body.castShadow = true;
-            lionGroup.add(body);
-            
-            // Head
-            const headGeometry = new THREE.SphereGeometry(0.7, 16, 16);
-            const headMaterial = new THREE.MeshStandardMaterial({ color: 0xC2B280 });
-            const head = new THREE.Mesh(headGeometry, headMaterial);
-            head.position.set(1.2, 1.5, 0);
-            head.castShadow = true;
-            lionGroup.add(head);
-            
-            // Mane
-            const maneGeometry = new THREE.SphereGeometry(1, 16, 16);
-            const maneMaterial = new THREE.MeshStandardMaterial({ color: 0xCD853F });
-            const mane = new THREE.Mesh(maneGeometry, maneMaterial);
-            mane.position.set(1.2, 1.5, 0);
-            mane.scale.set(1.2, 1.2, 1.2);
-            mane.castShadow = true;
-            lionGroup.add(mane);
-            
-            // Face
-            const snoutGeometry = new THREE.CylinderGeometry(0.2, 0.3, 0.4, 8);
-            const snoutMaterial = new THREE.MeshStandardMaterial({ color: 0xD2B48C });
-            const snout = new THREE.Mesh(snoutGeometry, snoutMaterial);
-            snout.position.set(1.7, 1.4, 0);
-            snout.rotation.z = Math.PI / 2;
-            snout.castShadow = true;
-            lionGroup.add(snout);
-            
-            // Eyes
-            const eyeGeometry = new THREE.SphereGeometry(0.1, 8, 8);
-            const eyeMaterial = new THREE.MeshStandardMaterial({ color: 0x000000 });
-            
-            const leftEye = new THREE.Mesh(eyeGeometry, eyeMaterial);
-            leftEye.position.set(1.6, 1.7, 0.3);
-            lionGroup.add(leftEye);
-            
-            const rightEye = new THREE.Mesh(eyeGeometry, eyeMaterial);
-            rightEye.position.set(1.6, 1.7, -0.3);
-            lionGroup.add(rightEye);
-            
-            // Legs
-            const legGeometry = new THREE.CylinderGeometry(0.2, 0.2, 1, 8);
-            const legMaterial = new THREE.MeshStandardMaterial({ color: 0xC2B280 });
-            
-            const frontLeftLeg = new THREE.Mesh(legGeometry, legMaterial);
-            frontLeftLeg.position.set(0.6, 0.5, 0.5);
-            frontLeftLeg.castShadow = true;
-            lionGroup.add(frontLeftLeg);
-            
-            const frontRightLeg = new THREE.Mesh(legGeometry, legMaterial);
-            frontRightLeg.position.set(0.6, 0.5, -0.5);
-            frontRightLeg.castShadow = true;
-            lionGroup.add(frontRightLeg);
-            
-            const backLeftLeg = new THREE.Mesh(legGeometry, legMaterial);
-            backLeftLeg.position.set(-0.6, 0.5, 0.5);
-            backLeftLeg.castShadow = true;
-            lionGroup.add(backLeftLeg);
-            
-            const backRightLeg = new THREE.Mesh(legGeometry, legMaterial);
-            backRightLeg.position.set(-0.6, 0.5, -0.5);
-            backRightLeg.castShadow = true;
-            lionGroup.add(backRightLeg);
-            
-            // Tail
-            const tailGeometry = new THREE.CylinderGeometry(0.1, 0.15, 1.5, 8);
-            const tailMaterial = new THREE.MeshStandardMaterial({ color: 0xC2B280 });
-            const tail = new THREE.Mesh(tailGeometry, tailMaterial);
-            tail.position.set(-1.5, 1.2, 0);
-            tail.rotation.z = Math.PI / 4;
-            tail.castShadow = true;
-            lionGroup.add(tail);
-            
-            // Tail tuft
-            const tuftGeometry = new THREE.SphereGeometry(0.2, 8, 8);
-            const tuftMaterial = new THREE.MeshStandardMaterial({ color: 0x8B4513 });
-            const tuft = new THREE.Mesh(tuftGeometry, tuftMaterial);
-            tuft.position.set(-2, 1.8, 0);
-            tuft.castShadow = true;
-            lionGroup.add(tuft);
-            
-            // Position the lion
-            lionGroup.position.set(-2, 0, 0);
-            scene.add(lionGroup);
-            
-            return lionGroup;
-        }
-        
-        const lion = createLion();
-        
-        // Create grass tufts
-        for (let i = 0; i < 200; i++) {
-            const tuftGeometry = new THREE.ConeGeometry(0.2, 1, 4);
-            const tuftMaterial = new THREE.MeshStandardMaterial({ 
-                color: 0x7CFC00,
-                side: THREE.DoubleSide
-            });
-            const tuft = new THREE.Mesh(tuftGeometry, tuftMaterial);
-            
-            const x = Math.random() * 80 - 40;
-            const z = Math.random() * 80 - 40;
-            
-            // Don't place grass too close to the lion or tree
-            const distToLion = Math.sqrt(Math.pow(x - lion.position.x, 2) + Math.pow(z - lion.position.z, 2));
-            const distToTree = Math.sqrt(Math.pow(x - tree.position.x, 2) + Math.pow(z - tree.position.z, 2));
-            
-            if (distToLion > 4 && distToTree > 5) {
-                tuft.position.set(x, 0.5, z);
-                tuft.rotation.y = Math.random() * Math.PI;
-                tuft.castShadow = true;
-                scene.add(tuft);
-            }
-        }
-        
-        // Day/night cycle
-        let time = 0;
-        
-        // Animation
-        function animate() {
-            requestAnimationFrame(animate);
-            
-            // Update controls
-            controls.update();
-            
-            // Update time and day/night cycle
-            time += 0.002;
-            const daylight = Math.sin(time) * 0.5 + 0.5;
-            ambientLight.intensity = 0.1 + daylight * 0.5;
-            directionalLight.intensity = daylight;
-            
-            // Position the sun
-            directionalLight.position.x = Math.sin(time) * 10;
-            directionalLight.position.y = Math.sin(time) * 5 + 5;
-            directionalLight.position.z = Math.cos(time) * 10;
-            
-            // Change sky color based on time
-            const r = 0.5 + daylight * 0.3;
-            const g = 0.6 + daylight * 0.4;
-            const b = 0.8 + daylight * 0.2;
-            scene.background.setRGB(r, g, b);
-            
-            // Animate lion (subtle breathing)
-            lion.children[0].scale.y = 1 + Math.sin(time * 3) * 0.05;
-            lion.children[2].scale.y = 1 + Math.sin(time * 3) * 0.05;
-            
-            // Animate tail
-            lion.children[9].rotation.z = Math.PI / 4 + Math.sin(time * 2) * 0.2;
-            lion.children[10].position.x = -2 + Math.sin(time * 2) * 0.1;
-            lion.children[10].position.y = 1.8 + Math.sin(time * 2) * 0.1;
-            
-            renderer.render(scene, camera);
-        }
-        
-        // Handle window resize
-        window.addEventListener('resize', function() {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        });
-        
-        // Start animation
-        animate();
-    </script>
-</body>
-</html>"""
-
-# Enhanced prompt function using explicit examples
-async def enhance_prompt(basic_prompt):
-    """Transform a basic prompt into a detailed scene description"""
-    headers = {
-        "x-api-key": ANTHROPIC_API_KEY,
-        "content-type": "application/json",
-        "anthropic-version": "2023-06-01"
-    }
+def extract_code(response_text):
+    """Extract Three.js code from Claude's response with improved regex."""
+    # First, check if there's a complete HTML document
+    html_doc_pattern = r"<!DOCTYPE html>[\s\S]*?<html[\s\S]*?</html>"
+    html_doc_match = re.search(html_doc_pattern, response_text, re.IGNORECASE)
     
-    # Build a system prompt with examples
-    example_text = ""
-    for example in EXAMPLE_MAPPINGS:
-        example_text += f"SIMPLE: \"{example['simple']}\"\n"
-        example_text += f"ENHANCED: \"{example['enhanced']}\"\n\n"
+    if html_doc_match:
+        return html_doc_match.group(0), "html"
     
-    system_prompt = f"""You transform simple scene descriptions into detailed specifications for 3D visualization.
-
-Here are examples of the exact transformation expected:
-
-{example_text}
-Your job is to transform the user's simple prompt into a similar enhanced description that describes:
-1. Core visual elements with specific details (shapes, sizes, colors)
-2. Movement and animations that bring the scene to life
-3. Lighting and atmospheric effects
-4. Interactive elements where appropriate
-5. Spatial relationships between objects
-
-CRITICALLY IMPORTANT: Always specify that objects should be created using only THREE.js primitive shapes (boxes, spheres, cylinders, etc.) and NOT using external 3D models or resources.
-
-The enhanced description should be 150-250 words and focus entirely on what should appear in the scene."""
+    # Try to extract HTML code blocks with triple backticks
+    html_pattern = r"```(?:html)?(.*?)```"
+    html_matches = re.findall(html_pattern, response_text, re.DOTALL)
     
-    data = {
-        "model": "claude-3-opus-20240229",
-        "max_tokens": 750,
-        "temperature": 0.3,
-        "system": system_prompt,
-        "messages": [
-            {"role": "user", "content": f"""Transform this simple description:
-
-"{basic_prompt}"
-
-Into a detailed scene description similar to the examples in your instructions.
-Focus only on what should appear in the scene and how it should behave.
-IMPORTANT: Specify that all objects must be created using THREE.js primitive shapes (boxes, spheres, cylinders, etc.) and NOT using external 3D models."""}
-        ]
-    }
+    if html_matches:
+        for match in html_matches:
+            # Check if it contains core HTML elements
+            if "<html" in match.lower() and "</html>" in match.lower():
+                return match.strip(), "html"
     
-    async with httpx.AsyncClient(timeout=45.0) as client:
-        response = await client.post(
-            "https://api.anthropic.com/v1/messages",
-            json=data,
-            headers=headers
+    # Then try JavaScript code blocks
+    js_pattern = r"```(?:javascript|js)(.*?)```"
+    js_matches = re.findall(js_pattern, response_text, re.DOTALL)
+    
+    if js_matches:
+        return js_matches[0].strip(), "js"
+    
+    # Fallback: try to find any code block
+    generic_pattern = r"```(.*?)```"
+    generic_matches = re.findall(generic_pattern, response_text, re.DOTALL)
+    
+    if generic_matches:
+        # Try to determine if it's HTML or JS
+        for match in generic_matches:
+            if "<html" in match.lower() or "<script" in match.lower():
+                return match.strip(), "html"
+            elif "three.js" in match.lower() or "new THREE." in match:
+                return match.strip(), "js"
+        
+        # If we can't determine, return the first block
+        return generic_matches[0].strip(), "generic"
+    
+    # Last resort: try to find anything that looks like a complete HTML document
+    if "<!DOCTYPE html>" in response_text or "<html>" in response_text:
+        start_idx = max(response_text.find("<!DOCTYPE html>"), response_text.find("<html>"))
+        end_idx = response_text.find("</html>", start_idx)
+        if end_idx > start_idx:
+            return response_text[start_idx:end_idx+7], "html"
+    
+    return "", ""
+
+def create_html_with_code(threejs_code, code_type):
+    """Create complete HTML with improved Three.js code integration."""
+    # If the code already contains a complete HTML document, return it as is
+    if code_type == "html" and ("<html" in threejs_code.lower() and "</html>" in threejs_code.lower()):
+        # Ensure all Three.js dependencies are correctly loaded
+        if "three@" not in threejs_code:
+            # Add the latest Three.js if not present
+            threejs_code = threejs_code.replace(
+                "</head>", 
+                '<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>\n</head>'
+            )
+        
+        if "OrbitControls" not in threejs_code and "controls/OrbitControls.js" not in threejs_code:
+            # Add OrbitControls if not present
+            threejs_code = threejs_code.replace(
+                '</head>',
+                '<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/js/controls/OrbitControls.js"></script>\n</head>'
+            )
+        
+        return threejs_code
+    
+    # If we have JavaScript code, wrap it in a complete HTML document
+    if code_type in ["js", "generic"]:
+        return f"""
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>AI Generated Three.js Scene</title>
+            <style>
+                body {{ margin: 0; padding: 0; overflow: hidden; }}
+                canvas {{ width: 100%; height: 100%; display: block; }}
+                #loading {{ position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
+                          display: flex; justify-content: center; align-items: center;
+                          background-color: rgba(0,0,0,0.7); color: white; font-family: Arial; 
+                          font-size: 24px; z-index: 1000; }}
+            </style>
+            <!-- Import Three.js libraries -->
+            <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+            <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/js/controls/OrbitControls.js"></script>
+        </head>
+        <body>
+            <div id="loading">Loading 3D Scene...</div>
+            <script>
+            // Wait for Three.js to load
+            window.addEventListener('load', function() {{
+                {threejs_code}
+                
+                // Remove loading screen when scene is ready
+                document.getElementById('loading').style.display = 'none';
+            }});
+            
+            // Error handling
+            window.addEventListener('error', function(e) {{
+                console.error('Three.js error:', e);
+                document.getElementById('loading').innerHTML = 'Error loading scene.<br>See console for details.';
+                document.getElementById('loading').style.backgroundColor = 'rgba(255,0,0,0.7)';
+            }});
+            </script>
+        </body>
+        </html>
+        """
+    
+    # If we have nothing usable, return a meaningful error page
+    return """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Scene Generation Error</title>
+        <style>
+            body { font-family: Arial, sans-serif; text-align: center; padding-top: 50px; }
+            .error { color: red; margin: 20px; }
+        </style>
+    </head>
+    <body>
+        <h1>Scene Generation Error</h1>
+        <p class="error">No valid Three.js code was found in the AI response.</p>
+        <p>Please try again with a more detailed description or check the AI Response tab for more information.</p>
+    </body>
+    </html>
+    """
+
+def add_to_history(prompt, html_content):
+    """Add a generated scene to history."""
+    # Create a unique ID for the scene
+    scene_id = f"scene_{int(time.time())}"
+    
+    st.session_state.history.append({
+        "id": scene_id,
+        "prompt": prompt,
+        "html": html_content,
+        "timestamp": st.session_state.get("current_timestamp", "")
+    })
+
+def render_threejs_scene(html_content, height=600):
+    """Render the Three.js scene in an iframe with improved error handling."""
+    # Use Base64 encoding to ensure all content is properly loaded in the iframe
+    encoded_content = base64.b64encode(html_content.encode()).decode()
+    
+    iframe_html = f"""
+    <iframe 
+        srcdoc="{html_content.replace('"', '&quot;')}" 
+        width="100%" 
+        height="{height}" 
+        style="border:none; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);" 
+        allow="accelerometer; camera; fullscreen; gyroscope; microphone; xr-spatial-tracking"
+        sandbox="allow-scripts allow-same-origin"
+    ></iframe>
+    """
+    
+    st.components.v1.html(iframe_html, height=height+10, scrolling=False)
+
+def generate_threejs_code(prompt):
+    """Generate Three.js code using Claude API with improved prompt."""
+    system_prompt = """You are an expert in Three.js, WebGL, and 3D web development. 
+    Your task is to create complete, standalone Three.js code based on the user's description.
+    
+    REQUIREMENTS FOR YOUR RESPONSE:
+    1. Your response MUST contain a SINGLE complete HTML document with embedded Three.js code.
+    2. The HTML document MUST be enclosed within ```html``` and ``` tags for proper extraction.
+    3. The document MUST contain all necessary scripts and CSS inline, requiring no external files.
+    
+    TECHNICAL REQUIREMENTS:
+    1. Import Three.js and OrbitControls from CDN (use Three.js version 0.160.0)
+    2. Set up a proper canvas, scene, camera, renderer, and lighting
+    3. Create the 3D objects described with appropriate materials and textures
+    4. Include animations and OrbitControls for user interaction
+    5. Handle window resizing correctly
+    6. Include error handling for texture/model loading
+    7. Use only features compatible with modern browsers
+    8. Add detailed code comments explaining key aspects
+    
+    CRITICAL CONSTRAINTS:
+    - For textures and models, only use CDN URLs or basic procedural textures
+    - Use requestAnimationFrame for animations
+    - ALL code must be self-contained in a single HTML file
+    - Include responsive design to handle window resizing
+    - Make sure OrbitControls are properly configured
+    
+    Example of correctly formatted response:
+    ```html
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Three.js Scene</title>
+        <!-- Imports and CSS here -->
+    </head>
+    <body>
+        <script>
+            // Three.js code here
+        </script>
+    </body>
+    </html>
+    ```
+    
+    Ensure your entire response can be extracted and run directly in a browser with no modifications.
+    """
+    
+    try:
+        response = client.messages.create(
+            model="claude-3-opus-20240229",
+            max_tokens=4000,
+            temperature=0.2,
+            system=system_prompt,
+            messages=[
+                {"role": "user", "content": f"Create a Three.js scene with the following description: {prompt}. Make it visually interesting with good lighting and materials."}
+            ]
         )
-        
-        if response.status_code != 200:
-            return basic_prompt, f"Error: {response.status_code}"
-        
-        response_data = response.json()
-        
-        if "content" in response_data and len(response_data["content"]) > 0:
-            enhanced_prompt = response_data["content"][0]["text"]
-            return enhanced_prompt, None
-        else:
-            return basic_prompt, "No content in response"
+        code, code_type = extract_code(response.content[0].text)
+        return code, code_type, response.content[0].text
+    except Exception as e:
+        st.error(f"Error generating code: {str(e)}")
+        return "", "", f"Error: {str(e)}"
 
-# Scene generator with improved template approach
-async def generate_scene(prompt, simple_prompt):
-    """Generate a complete Three.js scene from a prompt"""
-    headers = {
-        "x-api-key": ANTHROPIC_API_KEY,
-        "content-type": "application/json",
-        "anthropic-version": "2023-06-01"
-    }
-    
-    # Get example mapping that best matches the concept
-    best_example = None
-    for i, example in enumerate(EXAMPLE_MAPPINGS):
-        if any(keyword in simple_prompt.lower() for keyword in example["simple"].lower().split()):
-            best_example = example
-            best_example_index = i
-            break
-    
-    if not best_example:
-        best_example = EXAMPLE_MAPPINGS[0]  # Default to city example
-        best_example_index = 0
-    
-    # Create a system prompt with the full mapping example
-    example_html = LION_EXAMPLE_HTML if best_example_index == 1 else """<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D City Scene</title>
+def display_scene_container():
+    """Create a container for displaying the Three.js scene with proper styling."""
+    container = st.container()
+    container.markdown("""
     <style>
+    .scene-container {
+        background-color: #f0f0f0;
+        border-radius: 10px;
+        padding: 10px;
+        margin-bottom: 20px;
+    }
+    </style>
+    <div class="scene-container">
+    <h3>Interactive 3D Scene</h3>
+    <p>Use mouse to interact: Left-click & drag to rotate, right-click & drag to pan, scroll to zoom</p>
+    </div>
+    """, unsafe_allow_html=True)
+    return container
+
+# Add a testing feature for pre-made scenes
+def get_test_scene():
+    """Return a pre-made Three.js scene for testing renderer."""
+    return """
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <title>Test Three.js Scene</title>
+        <style>
+            body { margin: 0; overflow: hidden; }
+            canvas { width: 100%; height: 100%; display: block; }
+        </style>
+        <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/js/controls/OrbitControls.js"></script>
+    </head>
+    <body>
+        <script>
+            // Set up scene
+            const scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x87CEEB);
+            
+            // Set up camera
+            const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.z = 5;
+            
+            // Set up renderer
+            const renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.body.appendChild(renderer.domElement);
+            
+            // Add controls
+            const controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            
+            // Add light
+            const light = new THREE.DirectionalLight(0xffffff, 1);
+            light.position.set(1, 1, 1);
+            scene.add(light);
+            
+            const ambientLight = new THREE.AmbientLight(0x404040);
+            scene.add(ambientLight);
+            
+            // Create a rotating cube
+            const geometry = new THREE.BoxGeometry();
+            const material = new THREE.MeshStandardMaterial({ 
+                color: 0x00ff00,
+                metalness: 0.3,
+                roughness: 0.4
+            });
+            const cube = new THREE.Mesh(geometry, material);
+            scene.add(cube);
+            
+            // Handle window resize
+            window.addEventListener('resize', () => {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            });
+            
+            // Animation loop
+            function animate() {
+                requestAnimationFrame(animate);
+                cube.rotation.x += 0.01;
+                cube.rotation.y += 0.01;
+                controls.update();
+                renderer.render(scene, camera);
+            }
+            animate();
+        </script>
+    </body>
+    </html>
+    """
+
+def get_solar_system_demo():
+    """Return the solar system demo scene."""
+    return """
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Procedural Solar System</title>
+      <style>
         body {
-            margin: 0;
-            overflow: hidden;
+          margin: 0;
+          overflow: hidden;
+          background-color: #000;
         }
         canvas {
-            display: block;
+          width: 100%;
+          height: 100%;
+          display: block;
         }
-        #info {
-            position: absolute;
-            top: 10px;
-            width: 100%;
-            text-align: center;
-            color: white;
-            font-family: Arial, sans-serif;
-            pointer-events: none;
+        .info {
+          position: absolute;
+          top: 10px;
+          left: 10px;
+          color: white;
+          font-family: Arial, sans-serif;
+          padding: 10px;
+          background-color: rgba(0, 0, 0, 0.5);
+          border-radius: 5px;
+          font-size: 14px;
+          z-index: 100;
         }
-    </style>
-</head>
-<body>
-    <div id="info">3D City Scene - Use mouse to navigate</div>
-    <script src="https://unpkg.com/three@0.137.0/build/three.min.js"></script>
-    <script src="https://unpkg.com/three@0.137.0/examples/js/controls/OrbitControls.js"></script>
-    <script>
-        // Scene, camera, renderer setup
+        .planet-label {
+          position: absolute;
+          color: white;
+          font-family: Arial, sans-serif;
+          font-size: 12px;
+          padding: 2px 5px;
+          background-color: rgba(0, 0, 0, 0.5);
+          border-radius: 3px;
+          pointer-events: none;
+          display: none;
+        }
+      </style>
+    </head>
+    <body>
+      <div class="info">Solar System<br>Use mouse to rotate, scroll to zoom</div>
+      <div id="planetLabel" class="planet-label"></div>
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+      <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+      <script>
+        // Scene setup
         const scene = new THREE.Scene();
-        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.body.appendChild(renderer.domElement);
-        
-        // Background
-        scene.background = new THREE.Color(0x87CEEB);
-        
-        // Camera and controls
-        camera.position.set(30, 30, 30);
-        const controls = new THREE.OrbitControls(camera, renderer.domElement);
-        controls.enableDamping = true;
-        controls.dampingFactor = 0.05;
-        
-        // Lights
-        const ambientLight = new THREE.AmbientLight(0x404040, 0.5);
+
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(0x404040);
         scene.add(ambientLight);
-        
-        const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
-        directionalLight.position.set(50, 100, 50);
-        directionalLight.castShadow = true;
-        scene.add(directionalLight);
-        
-        // Ground
-        const groundGeometry = new THREE.PlaneBufferGeometry(200, 200);
-        const groundMaterial = new THREE.MeshStandardMaterial({ color: 0x333333 });
-        const ground = new THREE.Mesh(groundGeometry, groundMaterial);
-        ground.rotation.x = -Math.PI / 2;
-        ground.receiveShadow = true;
-        scene.add(ground);
-        
-        // Buildings
-        function createBuilding(x, z, width, height, depth) {
-            const buildingGeometry = new THREE.BoxBufferGeometry(width, height, depth);
-            const buildingMaterial = new THREE.MeshStandardMaterial({
-                color: Math.random() > 0.5 ? 0x808080 : 0xa0a0a0,
-                roughness: 0.7
-            });
+        const pointLight = new THREE.PointLight(0xffffff, 2, 300);
+        scene.add(pointLight);
+
+        // Camera controls
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        camera.position.set(0, 50, 150);
+        controls.update();
+
+        // Procedural texture generation
+        function createCanvasTexture(width, height, drawFunction) {
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          drawFunction(ctx, width, height);
+          return new THREE.CanvasTexture(canvas);
+        }
+
+        // Generate star field texture
+        function generateStarfieldTexture(size) {
+          return createCanvasTexture(size, size, (ctx, width, height) => {
+            ctx.fillStyle = 'black';
+            ctx.fillRect(0, 0, width, height);
             
-            const building = new THREE.Mesh(buildingGeometry, buildingMaterial);
-            building.position.set(x, height/2, z);
-            building.castShadow = true;
-            building.receiveShadow = true;
-            scene.add(building);
-            
-            // Add windows
-            if (height > 5) {
-                const windowSize = 0.5;
-                const windowGeometry = new THREE.PlaneBufferGeometry(windowSize, windowSize);
-                const windowMaterial = new THREE.MeshStandardMaterial({
-                    color: 0xaaaaff,
-                    emissive: 0x555555,
-                    emissiveIntensity: 0.2
-                });
-                
-                // Calculate number of windows based on building size
-                const windowsPerFloor = Math.max(1, Math.floor(width / 2));
-                const floors = Math.max(1, Math.floor(height / 3));
-                
-                for (let floor = 0; floor < floors; floor++) {
-                    for (let i = 0; i < windowsPerFloor; i++) {
-                        // Front windows
-                        const frontWindow = new THREE.Mesh(windowGeometry, windowMaterial.clone());
-                        frontWindow.position.set(
-                            x - width/2 + (i + 0.5) * (width / windowsPerFloor),
-                            floor * 3 + 1.5,
-                            z + depth/2 + 0.01
-                        );
-                        scene.add(frontWindow);
-                        
-                        // Back windows
-                        const backWindow = new THREE.Mesh(windowGeometry, windowMaterial.clone());
-                        backWindow.position.set(
-                            x - width/2 + (i + 0.5) * (width / windowsPerFloor),
-                            floor * 3 + 1.5,
-                            z - depth/2 - 0.01
-                        );
-                        backWindow.rotation.y = Math.PI;
-                        scene.add(backWindow);
-                    }
-                }
+            // Add stars
+            ctx.fillStyle = 'white';
+            for (let i = 0; i < 1000; i++) {
+              const x = Math.random() * width;
+              const y = Math.random() * height;
+              const radius = Math.random() * 1.5;
+              ctx.beginPath();
+              ctx.arc(x, y, radius, 0, Math.PI * 2);
+              ctx.fill();
             }
             
-            return building;
-        }
-        
-        // Create buildings in a grid
-        const buildings = [];
-        for (let x = -80; x < 80; x += 20) {
-            for (let z = -80; z < 80; z += 20) {
-                // Vary building sizes
-                const width = 5 + Math.random() * 10;
-                const height = 5 + Math.random() * 40;
-                const depth = 5 + Math.random() * 10;
-                
-                // Add random offset to position
-                const offsetX = (Math.random() - 0.5) * 10;
-                const offsetZ = (Math.random() - 0.5) * 10;
-                
-                // Create building
-                const building = createBuilding(x + offsetX, z + offsetZ, width, height, depth);
-                buildings.push(building);
+            // Add some colored stars
+            const colors = ['rgba(255,200,200,0.8)', 'rgba(200,200,255,0.8)', 'rgba(255,255,200,0.8)'];
+            for (let i = 0; i < 100; i++) {
+              const x = Math.random() * width;
+              const y = Math.random() * height;
+              const radius = Math.random() * 1.8 + 0.5;
+              ctx.fillStyle = colors[Math.floor(Math.random() * colors.length)];
+              ctx.beginPath();
+              ctx.arc(x, y, radius, 0, Math.PI * 2);
+              ctx.fill();
             }
+          });
         }
-        
-        // Create roads
-        function createRoad(x1, z1, x2, z2, width) {
-            const length = Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(z2 - z1, 2));
-            const roadGeometry = new THREE.PlaneBufferGeometry(length, width);
-            const roadMaterial = new THREE.MeshStandardMaterial({ color: 0x333333 });
-            const road = new THREE.Mesh(roadGeometry, roadMaterial);
+
+        // Sun texture - fiery with solar flares
+        function generateSunTexture(size) {
+          return createCanvasTexture(size, size, (ctx, width, height) => {
+            // Create radial gradient for the sun
+            const gradient = ctx.createRadialGradient(
+              width/2, height/2, 0,
+              width/2, height/2, width/2
+            );
             
-            // Position and rotate to connect the points
-            road.position.set((x1 + x2) / 2, 0.01, (z1 + z2) / 2);
-            road.rotation.x = -Math.PI / 2;
-            road.rotation.z = Math.atan2(z2 - z1, x2 - x1);
+            gradient.addColorStop(0, '#ffff80');
+            gradient.addColorStop(0.2, '#ffdd00');
+            gradient.addColorStop(0.4, '#ff8800');
+            gradient.addColorStop(0.6, '#ff4400');
+            gradient.addColorStop(1, '#ff2200');
             
-            road.receiveShadow = true;
-            scene.add(road);
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, width, height);
             
-            return road;
-        }
-        
-        // Create grid of roads
-        const roads = [];
-        for (let i = -80; i <= 80; i += 20) {
-            // Horizontal roads
-            createRoad(-80, i, 80, i, 10);
-            // Vertical roads
-            createRoad(i, -80, i, 80, 10);
-        }
-        
-        // Create cars
-        const cars = [];
-        function createCar() {
-            const car = new THREE.Group();
-            
-            // Car body
-            const bodyGeometry = new THREE.BoxBufferGeometry(2, 0.7, 1);
-            const bodyMaterial = new THREE.MeshStandardMaterial({
-                color: Math.random() * 0xffffff
-            });
-            const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
-            body.castShadow = true;
-            car.add(body);
-            
-            // Car top
-            const topGeometry = new THREE.BoxBufferGeometry(1, 0.5, 0.9);
-            const topMaterial = new THREE.MeshStandardMaterial({
-                color: 0x333333
-            });
-            const top = new THREE.Mesh(topGeometry, topMaterial);
-            top.position.y = 0.6;
-            top.castShadow = true;
-            car.add(top);
-            
-            // wheels
-            const wheelGeometry = new THREE.CylinderBufferGeometry(0.3, 0.3, 0.2, 8);
-            const wheelMaterial = new THREE.MeshStandardMaterial({ color: 0x333333 });
-            
-            const wheel1 = new THREE.Mesh(wheelGeometry, wheelMaterial);
-            wheel1.position.set(0.7, -0.3, 0.5);
-            wheel1.rotation.z = Math.PI / 2;
-            car.add(wheel1);
-            
-            const wheel2 = new THREE.Mesh(wheelGeometry, wheelMaterial);
-            wheel2.position.set(0.7, -0.3, -0.5);
-            wheel2.rotation.z = Math.PI / 2;
-            car.add(wheel2);
-            
-            const wheel3 = new THREE.Mesh(wheelGeometry, wheelMaterial);
-            wheel3.position.set(-0.7, -0.3, 0.5);
-            wheel3.rotation.z = Math.PI / 2;
-            car.add(wheel3);
-            
-            const wheel4 = new THREE.Mesh(wheelGeometry, wheelMaterial);
-            wheel4.position.set(-0.7, -0.3, -0.5);
-            wheel4.rotation.z = Math.PI / 2;
-            car.add(wheel4);
-            
-            // Add to scene
-            scene.add(car);
-            
-            // Random position on a road
-            const lane = Math.floor(Math.random() * 9) - 4;
-            const randomPos = (Math.random() - 0.5) * 160;
-            
-            if (Math.random() > 0.5) {
-                // Horizontal road
-                car.position.set(randomPos, 0.6, lane * 20);
-                car.rotation.y = Math.random() > 0.5 ? 0 : Math.PI;
-            } else {
-                // Vertical road
-                car.position.set(lane * 20, 0.6, randomPos);
-                car.rotation.y = Math.random() > 0.5 ? Math.PI / 2 : -Math.PI / 2;
+            // Add solar flares
+            for (let i = 0; i < 15; i++) {
+              const angle = Math.random() * Math.PI * 2;
+              const length = Math.random() * width/4 + width/10;
+              const startX = width/2 + Math.cos(angle) * (width/2 - 10);
+              const startY = height/2 + Math.sin(angle) * (height/2 - 10);
+              const endX = width/2 + Math.cos(angle) * (width/2 + length);
+              const endY = height/2 + Math.sin(angle) * (height/2 + length);
+              
+              const flareGradient = ctx.createLinearGradient(startX, startY, endX, endY);
+              flareGradient.addColorStop(0, 'rgba(255, 255, 0, 0.7)');
+              flareGradient.addColorStop(1, 'rgba(255, 100, 0, 0)');
+              
+              ctx.beginPath();
+              ctx.moveTo(startX, startY);
+              ctx.lineTo(endX, endY);
+              ctx.lineWidth = 5 + Math.random() * 15;
+              ctx.strokeStyle = flareGradient;
+              ctx.stroke();
             }
             
-            // Store direction
-            car.userData.direction = car.rotation.y;
-            car.userData.speed = 0.1 + Math.random() * 0.1;
-            
-            return car;
+            // Add sun spots
+            ctx.fillStyle = 'rgba(80, 30, 0, 0.3)';
+            for (let i = 0; i < 8; i++) {
+              const angle = Math.random() * Math.PI * 2;
+              const distance = Math.random() * width/3;
+              const x = width/2 + Math.cos(angle) * distance;
+              const y = height/2 + Math.sin(angle) * distance;
+              const radius = 5 + Math.random() * 15;
+              
+              ctx.beginPath();
+              ctx.arc(x, y, radius, 0, Math.PI * 2);
+              ctx.fill();
+            }
+          });
         }
-        
-        // Create cars
-        for (let i = 0; i < 30; i++) {
-            cars.push(createCar());
-        }
-        
-        // Animation loop
-        function animate() {
-            requestAnimationFrame(animate);
+
+        // Mercury - rocky, cratered
+        function generateMercuryTexture(size) {
+          return createCanvasTexture(size, size, (ctx, width, height) => {
+            // Base color - rocky gray-brown
+            ctx.fillStyle = '#a0928b';
+            ctx.fillRect(0, 0, width, height);
             
-            // Update car positions
-            cars.forEach(car => {
-                const speed = car.userData.speed;
+            // Add darker patches
+            for (let i = 0; i < 20; i++) {
+              const x = Math.random() * width;
+              const y = Math.random() * height;
+              const radius = Math.random() * width/6 + width/10;
+              
+              const gradient = ctx.createRadialGradient(
+                x, y, 0,
+                x, y, radius
+              );
+              
+              gradient.addColorStop(0, 'rgba(90, 85, 70, 0.4)');
+              gradient.addColorStop(1, 'rgba(90, 85, 70, 0)');
+              
+              ctx.fillStyle = gradient;
+              ctx.beginPath();
+              ctx.arc(x, y, radius, 0, Math.PI * 2);
+              ctx.fill();
+            }
+            
+            // Add craters
+            for (let i = 0; i < 300; i++) {
+              const x = Math.random() * width;
+              const y = Math.random() * height;
+              const radius = Math.random() * 5 + 1;
+              
+              ctx.fillStyle = Math.random() > 0.5 ? '#887775' : '#b5a9a4';
+              ctx.beginPath();
+              ctx.arc(x, y, radius, 0, Math.PI * 2);
+              ctx.fill();
+              
+              // Add crater rim highlight
+              ctx.strokeStyle = '#c5b9b4';
+              ctx.lineWidth = 0.5;
+              ctx.beginPath();
+              ctx.arc(x, y, radius, 0, Math.PI * 2);
+              ctx.stroke();
+            }
+          });
+        }
+
+        // Venus - yellowish with swirling clouds
+        function generateVenusTexture(size) {
+          return createCanvasTexture(size, size, (ctx, width, height) => {
+            // Base color - yellowish
+            ctx.fillStyle = '#e6c587';
+            ctx.fillRect(0, 0, width, height);
+            
+            // Add swirling clouds
+            for (let i = 0; i < 10; i++) {
+              const centerX = width / 2;
+              const centerY = height / 2;
+              
+              ctx.strokeStyle = 'rgba(255, 240, 200, 0.3)';
+              ctx.lineWidth = 10 + Math.random() * 20;
+              
+              // Create swirls
+              ctx.beginPath();
+              for (let angle = 0; angle < Math.PI * 8; angle += 0.1) {
+                const radius = (width/3) * (1 - angle/(Math.PI * 10)) + Math.random() * 20;
+                const x = centerX + Math.cos(angle) * radius;
+                const y = centerY + Math.sin(angle) * radius;
                 
-                // Move car based on its rotation
-                if (car.rotation.y === 0) {
-                    car.position.x += speed;
-                    if (car.position.x > 85) car.position.x = -85;
-                } else if (Math.abs(car.rotation.y - Math.PI) < 0.1) {
-                    car.position.x -= speed;
-                    if (car.position.x < -85) car.position.x = 85;
-                } else if (Math.abs(car.rotation.y - Math.PI/2) < 0.1) {
-                    car.position.z -= speed;
-                    if (car.position.z < -85) car.position.z = 85;
+                if (angle === 0) {
+                  ctx.moveTo(x, y);
                 } else {
-                    car.position.z += speed;
-                    if (car.position.z > 85) car.position.z = -85;
+                  ctx.lineTo(x, y);
                 }
+              }
+              ctx.stroke();
+            }
+            
+            // Add atmospheric haze
+            ctx.fillStyle = 'rgba(240, 218, 180, 0.3)';
+            ctx.fillRect(0, 0, width, height);
+          });
+        }
+
+        // Earth - blue oceans, green/brown land, white clouds
+        function generateEarthTexture(size) {
+          return createCanvasTexture(size, size, (ctx, width, height) => {
+            // Blue oceans as base
+            ctx.fillStyle = '#1a66b2';
+            ctx.fillRect(0, 0, width, height);
+            
+            // Generate continents
+            const numContinents = 7;
+            for (let i = 0; i < numContinents; i++) {
+              const centerX = Math.random() * width;
+              const centerY = Math.random() * height;
+              const baseSize = width / 6;
+              
+              // Continent color - green to brown
+              const greenValue = 100 + Math.floor(Math.random() * 60);
+              const redValue = 140 + Math.floor(Math.random() * 40);
+              ctx.fillStyle = `rgb(${redValue}, ${greenValue}, 50)`;
+              
+              // Draw landmass with random blob shape
+              ctx.beginPath();
+              const numPoints = 15;
+              for (let j = 0; j <= numPoints; j++) {
+                const angle = (j / numPoints) * Math.PI * 2;
+                const radius = baseSize * (0.5 + Math.random() * 0.8);
+                const x = centerX + Math.cos(angle) * radius;
+                const y = centerY + Math.sin(angle) * radius;
+                
+                if (j === 0) {
+                  ctx.moveTo(x, y);
+                } else {
+                  ctx.lineTo(x, y);
+                }
+              }
+              ctx.closePath();
+              ctx.fill();
+            }
+            
+            // Add clouds
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+            for (let i = 0; i < 20; i++) {
+              const x = Math.random() * width;
+              const y = Math.random() * height;
+              const radius = Math.random() * width/8 + width/20;
+              
+              ctx.beginPath();
+              ctx.arc(x, y, radius, 0, Math.PI * 2);
+              ctx.fill();
+            }
+            
+            // Add polar ice caps
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+            // North pole
+            ctx.beginPath();
+            ctx.ellipse(width/2, height/10, width/3, height/6, 0, 0, Math.PI * 2);
+            ctx.fill();
+            // South pole
+            ctx.beginPath();
+            ctx.ellipse(width/2, height - height/10, width/3, height/6, 0, 0, Math.PI * 2);
+            ctx.fill();
+          });
+        }
+
+        // Mars - reddish with darker features
+        function generateMarsTexture(size) {
+          return createCanvasTexture(size, size, (ctx, width, height) => {
+            // Base reddish color
+            ctx.fillStyle = '#c1572f';
+            ctx.fillRect(0, 0, width, height);
+            
+            // Add darker regions
+            for (let i = 0; i < 8; i++) {
+              const x = Math.random() * width;
+              const y = Math.random() * height;
+              const radius = Math.random() * width/4 + width/8;
+              
+              const gradient = ctx.createRadialGradient(
+                x, y, 0,
+                x, y, radius
+              );
+              
+              gradient.addColorStop(0, 'rgba(100, 40, 20, 0.5)');
+              gradient.addColorStop(1, 'rgba(100, 40, 20, 0)');
+              
+              ctx.fillStyle = gradient;
+              ctx.beginPath();
+              ctx.arc(x, y, radius, 0, Math.PI * 2);
+              ctx.fill();
+            }
+            
+            // Add polar caps
+            ctx.fillStyle = 'rgba(255, 240, 230, 0.7)';
+            // North pole
+            ctx.beginPath();
+            ctx.ellipse(width/2, height/8, width/4, height/8, 0, 0, Math.PI * 2);
+            ctx.fill();
+            // South pole
+            ctx.beginPath();
+            ctx.ellipse(width/2, height - height/8, width/4, height/8, 0, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Add craters
+            for (let i = 0; i < 200; i++) {
+              const x = Math.random() * width;
+              const y = Math.random() * height;
+              const radius = Math.random() * 3 + 1;
+              
+              ctx.fillStyle = '#a4472f';
+              ctx.beginPath();
+              ctx.arc(x, y, radius, 0, Math.PI * 2);
+              ctx.fill();
+            }
+          });
+        }
+
+        // Jupiter - banded with Great Red Spot
+        function generateJupiterTexture(size) {
+          return createCanvasTexture(size, size, (ctx, width, height) => {
+            // Base color
+            ctx.fillStyle = '#ebd39a';
+            ctx.fillRect(0, 0, width, height);
+            
+            // Add bands
+            const bands = [
+              { y: height * 0.1, color: 'rgba(184, 140, 50, 0.8)', thickness: height * 0.08 },
+              { y: height * 0.3, color: 'rgba(240, 200, 150, 0.7)', thickness: height * 0.1 },
+              { y: height * 0.5, color: 'rgba(184, 140, 50, 0.8)', thickness: height * 0.1 },
+              { y: height * 0.7, color: 'rgba(240, 200, 150, 0.7)', thickness: height * 0.1 },
+              { y: height * 0.9, color: 'rgba(184, 140, 50, 0.8)', thickness: height * 0.08 }
+            ];
+            
+            // Draw bands
+            bands.forEach(band => {
+              ctx.fillStyle = band.color;
+              ctx.fillRect(0, band.y - band.thickness/2, width, band.thickness);
+              
+              // Add details to each band
+              ctx.fillStyle = 'rgba(210, 180, 120, 0.3)';
+              for (let i = 0; i < 10; i++) {
+                const x = Math.random() * width;
+                const y = band.y - band.thickness/2 + Math.random() * band.thickness;
+                const spotWidth = Math.random() * width/6 + width/10;
+                const spotHeight = Math.random() * band.thickness/2 + band.thickness/4;
+                
+                ctx.beginPath();
+                ctx.ellipse(x, y, spotWidth, spotHeight, 0, 0, Math.PI * 2);
+                ctx.fill();
+              }
             });
             
-            // Update controls
-            controls.update();
+            // Add Great Red Spot
+            const spotX = width * 0.7;
+            const spotY = height * 0.3;
+            const spotWidth = width * 0.2;
+            const spotHeight = height * 0.08;
             
-            // Render scene
-            renderer.render(scene, camera);
+            ctx.fillStyle = '#bf4040';
+            ctx.beginPath();
+            ctx.ellipse(spotX, spotY, spotWidth, spotHeight, 0, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Add highlight to Great Red Spot
+            ctx.fillStyle = 'rgba(255, 100, 100, 0.3)';
+            ctx.beginPath();
+            ctx.ellipse(spotX - spotWidth * 0.2, spotY - spotHeight * 0.2, spotWidth * 0.7, spotHeight * 0.7, 0, 0, Math.PI * 2);
+            ctx.fill();
+          });
+        }
+
+        // Saturn - similar to Jupiter but more muted
+        function generateSaturnTexture(size) {
+          return createCanvasTexture(size, size, (ctx, width, height) => {
+            // Base color - pale yellow
+            ctx.fillStyle = '#e6dcb3';
+            ctx.fillRect(0, 0, width, height);
+            
+            // Add bands
+            const bands = [
+              { y: height * 0.15, color: 'rgba(200, 180, 120, 0.6)', thickness: height * 0.1 },
+              { y: height * 0.35, color: 'rgba(220, 200, 150, 0.5)', thickness: height * 0.1 },
+              { y: height * 0.55, color: 'rgba(200, 180, 120, 0.6)', thickness: height * 0.1 },
+              { y: height * 0.75, color: 'rgba(220, 200, 150, 0.5)', thickness: height * 0.1 },
+              { y: height * 0.9, color: 'rgba(200, 180, 120, 0.6)', thickness: height * 0.08 }
+            ];
+            
+            // Draw bands
+            bands.forEach(band => {
+              ctx.fillStyle = band.color;
+              ctx.fillRect(0, band.y - band.thickness/2, width, band.thickness);
+              
+              // Add details to each band
+              ctx.fillStyle = 'rgba(190, 170, 110, 0.3)';
+              for (let i = 0; i < 8; i++) {
+                const x = Math.random() * width;
+                const y = band.y - band.thickness/2 + Math.random() * band.thickness;
+                const spotWidth = Math.random() * width/8 + width/12;
+                const spotHeight = Math.random() * band.thickness/2 + band.thickness/4;
+                
+                ctx.beginPath();
+                ctx.ellipse(x, y, spotWidth, spotHeight, 0, 0, Math.PI * 2);
+                ctx.fill();
+              }
+            });
+            
+            // Add subtle storm
+            const stormX = width * 0.3;
+            const stormY = height * 0.4;
+            const stormRadius = width * 0.08;
+            
+            const stormGradient = ctx.createRadialGradient(
+              stormX, stormY, 0,
+              stormX, stormY, stormRadius
+            );
+            
+            stormGradient.addColorStop(0, 'rgba(230, 210, 160, 0.8)');
+            stormGradient.addColorStop(1, 'rgba(230, 210, 160, 0)');
+            
+            ctx.fillStyle = stormGradient;
+            ctx.beginPath();
+            ctx.arc(stormX, stormY, stormRadius, 0, Math.PI * 2);
+            ctx.fill();
+          });
+        }
+
+        // Saturn ring texture
+        function generateSaturnRingTexture(size) {
+          return createCanvasTexture(size, size, (ctx, width, height) => {
+            // Create transparent background
+            ctx.clearRect(0, 0, width, height);
+            
+            // Create ring gradient
+            const gradient = ctx.createRadialGradient(
+              width/2, height/2, width/4,
+              width/2, height/2, width/2
+            );
+            
+            gradient.addColorStop(0, 'rgba(230, 220, 180, 0.9)');
+            gradient.addColorStop(0.2, 'rgba(200, 180, 140, 0.8)');
+            gradient.addColorStop(0.4, 'rgba(180, 160, 120, 0.7)');
+            gradient.addColorStop(0.6, 'rgba(160, 140, 100, 0.6)');
+            gradient.addColorStop(0.8, 'rgba(140, 120, 80, 0.5)');
+            gradient.addColorStop(1, 'rgba(120, 100, 60, 0.4)');
+            
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, width, height);
+            
+            // Add ring divisions
+            const ringDivisions = [
+              { pos: 0.3, width: 0.02 },
+              { pos: 0.5, width: 0.04 },
+              { pos: 0.7, width: 0.03 },
+              { pos: 0.85, width: 0.02 }
+            ];
+            
+            ringDivisions.forEach(div => {
+              const radius = width/4 + (width/4) * div.pos;
+              const ringWidth = (width/4) * div.width;
+              
+              ctx.strokeStyle = 'rgba(50, 40, 30, 0.6)';
+              ctx.lineWidth = ringWidth;
+              ctx.beginPath();
+              ctx.arc(width/2, height/2, radius, 0, Math.PI * 2);
+              ctx.stroke();
+            });
+            
+            // Add particles to rings
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+            for (let i = 0; i < 400; i++) {
+              const angle = Math.random() * Math.PI * 2;
+              const distance = width/4 + Math.random() * (width/4);
+              const x = width/2 + Math.cos(angle) * distance;
+              const y = height/2 + Math.sin(angle) * distance;
+              const size = Math.random() * 1.5 + 0.5;
+              
+              ctx.beginPath();
+              ctx.arc(x, y, size, 0, Math.PI * 2);
+              ctx.fill();
+            }
+          });
+        }
+
+        // Uranus - light blue-green
+        function generateUranusTexture(size) {
+          return createCanvasTexture(size, size, (ctx, width, height) => {
+            // Create base gradient
+            const gradient = ctx.createRadialGradient(
+              width/2, height/2, 0,
+              width/2, height/2, width/2
+            );
+            
+            gradient.addColorStop(0, '#b1e5ee');
+            gradient.addColorStop(0.7, '#77a5b5');
+            gradient.addColorStop(1, '#5f8a9a');
+            
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, width, height);
+            
+            // Add subtle bands
+            const bands = [
+              { y: height * 0.25, color: 'rgba(160, 210, 220, 0.3)', thickness: height * 0.1 },
+              { y: height * 0.5, color: 'rgba(120, 180, 190, 0.3)', thickness: height * 0.12 },
+              { y: height * 0.75, color: 'rgba(160, 210, 220, 0.3)', thickness: height * 0.1 }
+            ];
+            
+            bands.forEach(band => {
+              ctx.fillStyle = band.color;
+              ctx.fillRect(0, band.y - band.thickness/2, width, band.thickness);
+            });
+            
+            // Add a few subtle clouds
+            ctx.fillStyle = 'rgba(170, 230, 240, 0.2)';
+            for (let i = 0; i < 8; i++) {
+              const x = Math.random() * width;
+              const y = Math.random() * height;
+              const cloudWidth = Math.random() * width/8 + width/12;
+              const cloudHeight = Math.random() * height/20 + height/40;
+              
+              ctx.beginPath();
+              ctx.ellipse(x, y, cloudWidth, cloudHeight, 0, 0, Math.PI * 2);
+              ctx.fill();
+            }
+          });
+        }
+
+        // Neptune - darker blue
+        function generateNeptuneTexture(size) {
+          return createCanvasTexture(size, size, (ctx, width, height) => {
+            // Create base gradient
+            const gradient = ctx.createRadialGradient(
+              width/2, height/2, 0,
+              width/2, height/2, width/2
+            );
+            
+            gradient.addColorStop(0, '#3e69b3');
+            gradient.addColorStop(0.7, '#2a4580');
+            gradient.addColorStop(1, '#1a2850');
+            
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, width, height);
+            
+            // Add subtle bands
+            const bands = [
+              { y: height * 0.3, color: 'rgba(70, 120, 180, 0.3)', thickness: height * 0.15 },
+              { y: height * 0.6, color: 'rgba(40, 80, 130, 0.3)', thickness: height * 0.12 },
+              { y: height * 0.85, color: 'rgba(70, 120, 180, 0.3)', thickness: height * 0.1 }
+            ];
+            
+            bands.forEach(band => {
+              ctx.fillStyle = band.color;
+              ctx.fillRect(0, band.y - band.thickness/2, width, band.thickness);
+            });
+            
+            // Add Great Dark Spot
+            const spotX = width * 0.6;
+            const spotY = height * 0.4;
+            const spotWidth = width * 0.15;
+            const spotHeight = height * 0.08;
+            
+            ctx.fillStyle = 'rgba(10, 30, 60, 0.7)';
+            ctx.beginPath();
+            ctx.ellipse(spotX, spotY, spotWidth, spotHeight, 0, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Add smaller storms and clouds
+            ctx.fillStyle = 'rgba(100, 150, 220, 0.3)';
+            for (let i = 0; i < 12; i++) {
+              const x = Math.random() * width;
+              const y = Math.random() * height;
+              const cloudWidth = Math.random() * width/12 + width/24;
+              const cloudHeight = Math.random() * height/25 + height/50;
+              
+              ctx.beginPath();
+              ctx.ellipse(x, y, cloudWidth, cloudHeight, Math.random() * Math.PI, 0, Math.PI * 2);
+              ctx.fill();
+            }
+          });
+        }
+
+        // Moon texture
+        function generateMoonTexture(size) {
+          return createCanvasTexture(size, size, (ctx, width, height) => {
+            // Base color - grayish
+            ctx.fillStyle = '#aaa9ad';
+            ctx.fillRect(0, 0, width, height);
+            
+            // Add darker and lighter patches
+            for (let i = 0; i < 30; i++) {
+              const x = Math.random() * width;
+              const y = Math.random() * height;
+              const radius = Math.random() * width/8 + width/16;
+              
+              const gradient = ctx.createRadialGradient(
+                x, y, 0,
+                x, y, radius
+              );
+              
+              if (Math.random() > 0.5) {
+                // Darker patch (maria)
+                gradient.addColorStop(0, 'rgba(70, 70, 80, 0.5)');
+                gradient.addColorStop(1, 'rgba(70, 70, 80, 0)');
+              } else {
+                // Lighter patch (highlands)
+                gradient.addColorStop(0, 'rgba(200, 200, 210, 0.4)');
+                gradient.addColorStop(1, 'rgba(200, 200, 210, 0)');
+              }
+              
+              ctx.fillStyle = gradient;
+              ctx.beginPath();
+              ctx.arc(x, y, radius, 0, Math.PI * 2);
+              ctx.fill();
+            }
+            
+            // Add craters
+            for (let i = 0; i < 300; i++) {
+              const x = Math.random() * width;
+              const y = Math.random() * height;
+              const radius = Math.random() * 5 + 1;
+              
+              // Crater
+              ctx.fillStyle = '#8a8a8a';
+              ctx.beginPath();
+              ctx.arc(x, y, radius, 0, Math.PI * 2);
+              ctx.fill();
+              
+              // Crater rim highlight
+              ctx.strokeStyle = '#c5c5c5';
+              ctx.lineWidth = 0.5;
+              ctx.beginPath();
+              ctx.arc(x, y, radius, 0, Math.PI * 2);
+              ctx.stroke();
+            }
+          });
+        }
+
+        // Create sun
+        const sunGeometry = new THREE.SphereGeometry(10, 64, 64);
+        const sunTexture = generateSunTexture(512);
+        const sunMaterial = new THREE.MeshBasicMaterial({ 
+          map: sunTexture,
+          emissive: 0xffdd00,
+          emissiveMap: sunTexture,
+          emissiveIntensity: 0.5
+        });
+        const sun = new THREE.Mesh(sunGeometry, sunMaterial);
+        scene.add(sun);
+
+        // Add sun glow effect
+        const sunGlowGeometry = new THREE.SphereGeometry(13, 32, 32);
+        const sunGlowMaterial = new THREE.MeshBasicMaterial({
+          color: 0xffdd00,
+          transparent: true,
+          opacity: 0.2,
+          side: THREE.BackSide
+        });
+        const sunGlow = new THREE.Mesh(sunGlowGeometry, sunGlowMaterial);
+        scene.add(sunGlow);
+
+        // Helper function to create a planet
+        function createPlanet(radius, textureFn, distance, name, tilt = 0, ringConfig = null) {
+          const geometry = new THREE.SphereGeometry(radius, 32, 32);
+          const texture = textureFn(256);
+          const material = new THREE.MeshLambertMaterial({ map: texture });
+          const planet = new THREE.Mesh(geometry, material);
+          planet.userData.name = name;
+          
+          // Create orbit
+          const orbitGeometry = new THREE.RingGeometry(distance - 0.1, distance + 0.1, 64);
+          const orbitMaterial = new THREE.MeshBasicMaterial({ 
+            color: 0x444444, 
+            side: THREE.DoubleSide,
+            transparent: true,
+            opacity: 0.3
+          });
+          const orbit = new THREE.Mesh(orbitGeometry, orbitMaterial);
+          orbit.rotation.x = Math.PI / 2;
+          scene.add(orbit);
+          
+          // Create planetary system
+          const planetSystem = new THREE.Object3D();
+          scene.add(planetSystem);
+          
+          // Create orbit path
+          const planetOrbit = new THREE.Object3D();
+          planetSystem.add(planetOrbit);
+          
+          // Add planet to orbit
+          planetOrbit.add(planet);
+          planet.position.x = distance;
+          
+          // Tilt the planet
+          planet.rotation.x = tilt * Math.PI / 180;
+          
+          // Add rings if configured (e.g., for Saturn)
+          if (ringConfig) {
+            const { innerRadius, outerRadius } = ringConfig;
+            const ringGeometry = new THREE.RingGeometry(innerRadius, outerRadius, 64);
+            const ringTexture = generateSaturnRingTexture(256);
+            const ringMaterial = new THREE.MeshBasicMaterial({ 
+              map: ringTexture,
+              side: THREE.DoubleSide,
+              transparent: true,
+              opacity: 0.9
+            });
+            const ring = new THREE.Mesh(ringGeometry, ringMaterial);
+            ring.rotation.x = Math.PI / 2;
+            planet.add(ring);
+          }
+          
+          return { planet, planetSystem, planetOrbit, name, distance };
+        }
+
+        // Create planets
+        const planets = [
+          createPlanet(0.8, generateMercuryTexture, 20, "Mercury", 0.01),
+          createPlanet(1.5, generateVenusTexture, 30, "Venus", 177.4),
+          createPlanet(1.6, generateEarthTexture, 40, "Earth", 23.5),
+          createPlanet(1.2, generateMarsTexture, 50, "Mars", 25.2),
+          createPlanet(4.0, generateJupiterTexture, 65, "Jupiter", 3.1),
+          createPlanet(3.5, generateSaturnTexture, 80, "Saturn", 26.7, {
+            innerRadius: 4,
+            outerRadius: 7
+          }),
+          createPlanet(2.5, generateUranusTexture, 95, "Uranus", 97.8),
+          createPlanet(2.3, generateNeptuneTexture, 110, "Neptune", 28.3)
+        ];
+        
+        // Add Earth's moon
+        const moonGeometry = new THREE.SphereGeometry(0.4, 24, 24);
+        const moonTexture = generateMoonTexture(128);
+        const moonMaterial = new THREE.MeshLambertMaterial({
+          map: moonTexture
+        });
+        const moon = new THREE.Mesh(moonGeometry, moonMaterial);
+        moon.userData.name = "Moon";
+        
+        const moonOrbit = new THREE.Object3D();
+        planets[2].planet.add(moonOrbit);
+        moonOrbit.add(moon);
+        moon.position.x = 3;
+
+        // Add starfield background (replaces individual stars with a skybox)
+        const starfieldGeometry = new THREE.SphereGeometry(400, 32, 32);
+        const starfieldTexture = generateStarfieldTexture(1024);
+        const starfieldMaterial = new THREE.MeshBasicMaterial({
+          map: starfieldTexture,
+          side: THREE.BackSide
+        });
+        const starfield = new THREE.Mesh(starfieldGeometry, starfieldMaterial);
+        scene.add(starfield);
+
+        // Planet labeling
+        const planetLabel = document.getElementById('planetLabel');
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+        
+        function onMouseMove(event) {
+          mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+          mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+          
+          raycaster.setFromCamera(mouse, camera);
+          
+          // Get all meshes to check for intersection
+          const meshes = planets.map(p => p.planet);
+          meshes.push(moon);
+          meshes.push(sun);
+          
+          const intersects = raycaster.intersectObjects(meshes);
+          
+          if (intersects.length > 0) {
+            const object = intersects[0].object;
+            const name = object.userData.name;
+            
+            if (name) {
+              planetLabel.textContent = name;
+              planetLabel.style.display = 'block';
+              planetLabel.style.left = event.clientX + 10 + 'px';
+              planetLabel.style.top = event.clientY + 10 + 'px';
+            }
+          } else {
+            planetLabel.style.display = 'none';
+          }
         }
         
+        window.addEventListener('mousemove', onMouseMove, false);
+
+        // Animation
+        let time = 0;
+        function animate() {
+          requestAnimationFrame(animate);
+          time += 0.005;
+          
+          // Make the sun pulse slightly
+          const pulseFactor = 1 + Math.sin(time * 2) * 0.03;
+          sunGlow.scale.set(pulseFactor, pulseFactor, pulseFactor);
+          
+          // Rotate planets around the sun
+          planets.forEach((planet, index) => {
+            // Different speeds based on distance
+            const speed = 0.005 / (0.5 + index * 0.2);
+            planet.planetSystem.rotation.y += speed;
+            
+            // Rotate planets on their axes
+            planet.planet.rotation.y += 0.01 / (index * 0.2 + 0.5);
+          });
+          
+          // Rotate moon around Earth
+          if (moonOrbit) {
+            moonOrbit.rotation.y += 0.02;
+            moon.rotation.y += 0.01;
+          }
+          
+          // Rotate sun
+          sun.rotation.y += 0.002;
+          
+          renderer.render(scene, camera);
+        }
+
         // Handle window resize
         window.addEventListener('resize', () => {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
+          camera.aspect = window.innerWidth / window.innerHeight;
+          camera.updateProjectionMatrix();
+          renderer.setSize(window.innerWidth, window.innerHeight);
         });
-        
-        // Start animation loop
+
+        // Start animation
         animate();
-    </script>
-</body>
-</html>"""
-    
-    system_prompt = f"""You are an expert Three.js developer who creates complete, working 3D web applications.
+      </script>
+    </body>
+    </html>
+    """
 
-I'll provide you with a description of a 3D scene. Your task is to generate a SINGLE, COMPLETE HTML file containing a Three.js scene that implements this description.
-
-CRITICALLY IMPORTANT: DO NOT USE EXTERNAL 3D MODELS OR RESOURCES. Create all scene elements using Three.js primitive shapes like BoxGeometry, SphereGeometry, CylinderGeometry, etc.
-
-Here's an example of the transformation from simple prompt to enhanced description to working HTML:
-
-SIMPLE PROMPT: "{best_example['simple']}"
-
-ENHANCED DESCRIPTION: "{best_example['enhanced']}"
-
-WORKING HTML: {example_html}
-
-Now, create a scene based on this description: "{prompt}"
-
-Your output must:
-1. Be a COMPLETE HTML document with all necessary Three.js imports
-2. Use unpkg.com CDN links for Three.js (version 0.137.0 or newer)
-3. Include OrbitControls for camera navigation
-4. Have proper lighting, shadows, and camera setup
-5. Implement animations that bring the scene to life
-6. Create ALL objects using Three.js primitive shapes (NOT GLTFLoader or other model loaders)
-7. Include a help message in a #info div to guide users
-8. Ensure all code is properly closed and browsers will render the scene correctly
-
-RETURN ONLY THE COMPLETE HTML DOCUMENT."""
+def render_enhanced_sidebar():
+    """Display an enhanced sidebar with navigation and history."""
+    # Add title with fancy icon
+    st.sidebar.markdown("# 🚀 Three.js Explorer")
     
-    data = {
-        "model": "claude-3-opus-20240229",
-        "max_tokens": 4000,
-        "temperature": 0.2,
-        "system": system_prompt,
-        "messages": [
-            {"role": "user", "content": f"""Create a complete, working Three.js scene based on this description:
-
-{prompt}
-
-Generate ONLY a complete HTML document with embedded JavaScript. Your HTML must include:
-1. Proper <head> section with viewport settings and styles
-2. Three.js and OrbitControls imported from unpkg.com (not CloudFlare)
-3. A complete scene setup with proper lighting
-4. Animated elements to bring the scene to life
-5. A help message in a #info div for users
-6. Responsive design that works on all screen sizes
-7. Create ALL objects using Three.js primitive shapes (NO EXTERNAL MODELS)
-
-DO NOT use GLTFLoader or try to load external 3D models. Build all scene elements directly using Three.js geometry.
-
-Your response should start with <!DOCTYPE html> and end with </html>."""}
-        ]
-    }
+    # Page navigation
+    st.sidebar.markdown("## 📋 Navigation")
     
-    debug_info = {
-        "request": {
-            "simple_prompt": simple_prompt,
-            "enhanced_prompt": prompt,
-            "system_prompt_length": len(system_prompt),
-            "model": data["model"],
-            "max_tokens": data["max_tokens"],
-            "temperature": data["temperature"]
-        },
-        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    }
+    col1, col2 = st.sidebar.columns(2)
+    with col1:
+        if st.button("🎮 Generator", use_container_width=True):
+            st.session_state.active_page = "generator"
+            st.experimental_rerun()
+    with col2:
+        if st.button("🌌 Demo Scene", use_container_width=True):
+            st.session_state.active_page = "demo"
+            st.experimental_rerun()
     
-    async with httpx.AsyncClient(timeout=180.0) as client:
-        response = await client.post(
-            "https://api.anthropic.com/v1/messages",
-            json=data,
-            headers=headers
-        )
-        
-        debug_info["status_code"] = response.status_code
-        
-        if response.status_code != 200:
-            debug_info["error"] = f"API error: {response.status_code} - {response.text}"
-            return None, debug_info
-        
-        response_data = response.json()
-        debug_info["response_meta"] = {
-            "model": response_data.get("model", ""),
-            "usage": response_data.get("usage", {}),
-        }
-        
-        if "content" in response_data and len(response_data["content"]) > 0:
-            response_text = response_data["content"][0]["text"]
-            # Get just the HTML portion
-            html_content = extract_html_from_response(response_text)
-            # Ensure it uses reliable CDN URLs
-            html_content = fix_cdn_urls(html_content)
-            # Remove any GLTFLoader references
-            html_content = remove_gltf_loader(html_content)
-            debug_info["html_length"] = len(html_content)
-            return html_content, debug_info
-        else:
-            debug_info["error"] = "No content in response"
-            return None, debug_info
-
-# Extract HTML from response
-def extract_html_from_response(response_text):
-    """Extract a complete HTML document from the response text"""
-    # Look for a complete HTML document
-    html_pattern = r"<!DOCTYPE html>[\s\S]*?<\/html>"
-    html_match = re.search(html_pattern, response_text, re.IGNORECASE)
+    # Add separator
+    st.sidebar.markdown("---")
     
-    if html_match:
-        return html_match.group(0)
+    # History section
+    st.sidebar.markdown("## 📜 Scene History")
     
-    # If no match, check for HTML without doctype
-    html_pattern = r"<html[\s\S]*?<\/html>"
-    html_match = re.search(html_pattern, response_text, re.IGNORECASE)
-    
-    if html_match:
-        return f"<!DOCTYPE html>\n{html_match.group(0)}"
-    
-    # If still no match, try to extract from code blocks
-    code_pattern = r"```(?:html)?\s*([\s\S]*?)\s*```"
-    code_matches = re.findall(code_pattern, response_text)
-    
-    if code_matches:
-        # Check each code block for HTML content
-        for code in code_matches:
-            if "<html" in code.lower() or "<!doctype" in code.lower():
-                if code.lower().startswith("<!doctype html>"):
-                    return code
-                elif code.lower().startswith("<html"):
-                    return f"<!DOCTYPE html>\n{code}"
-        
-        # If no HTML found, use the first code block and wrap it
-        return f"""<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Generated 3D Scene</title>
-    <style>
-        body {{ margin: 0; overflow: hidden; }}
-        #info {{
-            position: absolute;
-            top: 10px;
-            width: 100%;
-            text-align: center;
-            color: white;
-            font-family: Arial, sans-serif;
-            pointer-events: none;
-            text-shadow: 1px 1px 1px black;
-        }}
-    </style>
-</head>
-<body>
-    <div id="info">Generated 3D Scene - Use mouse to navigate</div>
-    <script src="https://unpkg.com/three@0.137.0/build/three.min.js"></script>
-    <script src="https://unpkg.com/three@0.137.0/examples/js/controls/OrbitControls.js"></script>
-    <script>
-    {code_matches[0]}
-    </script>
-</body>
-</html>"""
-    
-    # Last resort - create a fallback scene
-    return create_fallback_scene()
-
-# Fix CDN URLs to use unpkg.com instead of CloudFlare
-def fix_cdn_urls(html_content):
-    """Replace CDN URLs with reliable ones from unpkg.com"""
-    # Replace CloudFlare Three.js URL
-    html_content = re.sub(
-        r'(https?:)?\/\/cdnjs\.cloudflare\.com\/ajax\/libs\/three\.js\/[^\/]+\/three\.min\.js',
-        'https://unpkg.com/three@0.137.0/build/three.min.js',
-        html_content
-    )
-    
-    # Replace CloudFlare OrbitControls URL
-    html_content = re.sub(
-        r'(https?:)?\/\/cdnjs\.cloudflare\.com\/ajax\/libs\/three\.js\/[^\/]+\/controls\/OrbitControls\.min\.js',
-        'https://unpkg.com/three@0.137.0/examples/js/controls/OrbitControls.js',
-        html_content
-    )
-    
-    return html_content
-
-# Remove GLTF loader and model loading
-def remove_gltf_loader(html_content):
-    """Remove GLTFLoader and model loading from the HTML"""
-    # Remove GLTFLoader import
-    html_content = re.sub(
-        r'<script src="[^"]*GLTFLoader[^"]*"><\/script>',
-        '',
-        html_content
-    )
-    
-    # If GLTFLoader is found, inject the lion example code
-    if "GLTFLoader" in html_content or "loader.load(" in html_content:
-        html_content = html_content.replace("</body>", """
-    <script>
-        // Alert about external model attempt
-        console.warn("External model loading detected and removed. Using primitive shapes instead.");
-        
-        // Create lion using primitives
-        function createLion() {
-            const lionGroup = new THREE.Group();
-            
-            // Body
-            const bodyGeometry = new THREE.SphereGeometry(1, 16, 16);
-            const bodyMaterial = new THREE.MeshStandardMaterial({ color: 0xC2B280 });
-            const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
-            body.scale.set(1.2, 1, 1.5);
-            body.position.y = 1.1;
-            body.castShadow = true;
-            lionGroup.add(body);
-            
-            // Head
-            const headGeometry = new THREE.SphereGeometry(0.7, 16, 16);
-            const headMaterial = new THREE.MeshStandardMaterial({ color: 0xC2B280 });
-            const head = new THREE.Mesh(headGeometry, headMaterial);
-            head.position.set(1.2, 1.5, 0);
-            head.castShadow = true;
-            lionGroup.add(head);
-            
-            // Mane
-            const maneGeometry = new THREE.SphereGeometry(1, 16, 16);
-            const maneMaterial = new THREE.MeshStandardMaterial({ color: 0xCD853F });
-            const mane = new THREE.Mesh(maneGeometry, maneMaterial);
-            mane.position.set(1.2, 1.5, 0);
-            mane.scale.set(1.2, 1.2, 1.2);
-            mane.castShadow = true;
-            lionGroup.add(mane);
-            
-            // Face
-            const snoutGeometry = new THREE.CylinderGeometry(0.2, 0.3, 0.4, 8);
-            const snoutMaterial = new THREE.MeshStandardMaterial({ color: 0xD2B48C });
-            const snout = new THREE.Mesh(snoutGeometry, snoutMaterial);
-            snout.position.set(1.7, 1.4, 0);
-            snout.rotation.z = Math.PI / 2;
-            snout.castShadow = true;
-            lionGroup.add(snout);
-            
-            // Eyes
-            const eyeGeometry = new THREE.SphereGeometry(0.1, 8, 8);
-            const eyeMaterial = new THREE.MeshStandardMaterial({ color: 0x000000 });
-            
-            const leftEye = new THREE.Mesh(eyeGeometry, eyeMaterial);
-            leftEye.position.set(1.6, 1.7, 0.3);
-            lionGroup.add(leftEye);
-            
-            const rightEye = new THREE.Mesh(eyeGeometry, eyeMaterial);
-            rightEye.position.set(1.6, 1.7, -0.3);
-            lionGroup.add(rightEye);
-            
-            // Legs
-            const legGeometry = new THREE.CylinderGeometry(0.2, 0.2, 1, 8);
-            const legMaterial = new THREE.MeshStandardMaterial({ color: 0xC2B280 });
-            
-            const frontLeftLeg = new THREE.Mesh(legGeometry, legMaterial);
-            frontLeftLeg.position.set(0.6, 0.5, 0.5);
-            frontLeftLeg.castShadow = true;
-            lionGroup.add(frontLeftLeg);
-            
-            const frontRightLeg = new THREE.Mesh(legGeometry, legMaterial);
-            frontRightLeg.position.set(0.6, 0.5, -0.5);
-            frontRightLeg.castShadow = true;
-            lionGroup.add(frontRightLeg);
-            
-            const backLeftLeg = new THREE.Mesh(legGeometry, legMaterial);
-            backLeftLeg.position.set(-0.6, 0.5, 0.5);
-            backLeftLeg.castShadow = true;
-            lionGroup.add(backLeftLeg);
-            
-            const backRightLeg = new THREE.Mesh(legGeometry, legMaterial);
-            backRightLeg.position.set(-0.6, 0.5, -0.5);
-            backRightLeg.castShadow = true;
-            lionGroup.add(backRightLeg);
-            
-            // Tail
-            const tailGeometry = new THREE.CylinderGeometry(0.1, 0.15, 1.5, 8);
-            const tailMaterial = new THREE.MeshStandardMaterial({ color: 0xC2B280 });
-            const tail = new THREE.Mesh(tailGeometry, tailMaterial);
-            tail.position.set(-1.5, 1.2, 0);
-            tail.rotation.z = Math.PI / 4;
-            tail.castShadow = true;
-            lionGroup.add(tail);
-            
-            // Tail tuft
-            const tuftGeometry = new THREE.SphereGeometry(0.2, 8, 8);
-            const tuftMaterial = new THREE.MeshStandardMaterial({ color: 0x8B4513 });
-            const tuft = new THREE.Mesh(tuftGeometry, tuftMaterial);
-            tuft.position.set(-2, 1.8, 0);
-            tuft.castShadow = true;
-            lionGroup.add(tuft);
-            
-            // Position the lion
-            lionGroup.position.set(-2, 0, 0);
-            scene.add(lionGroup);
-            
-            return lionGroup;
-        }
-        
-        const lion = createLion();
-        let animateLion = function(time) {
-            // Animate lion (subtle breathing)
-            lion.children[0].scale.y = 1 + Math.sin(time * 3) * 0.05;
-            lion.children[2].scale.y = 1 + Math.sin(time * 3) * 0.05;
-            
-            // Animate tail
-            lion.children[9].rotation.z = Math.PI / 4 + Math.sin(time * 2) * 0.2;
-            lion.children[10].position.x = -2 + Math.sin(time * 2) * 0.1;
-            lion.children[10].position.y = 1.8 + Math.sin(time * 2) * 0.1;
-        };
-        
-        // Update the animation function to include lion animation
-        const originalAnimateFunction = animate;
-        animate = function() {
-            let time = Date.now() * 0.001;
-            if (typeof animateLion === 'function') {
-                animateLion(time);
-            }
-            originalAnimateFunction();
-        };
-    </script>
-</body>""")
-        
-        # Also remove any loader.load calls
-        html_content = re.sub(
-            r'const loader = new THREE\.GLTFLoader\(\);[\s\S]*?loader\.load\([^\)]*\)[^\}]*\}\);',
-            '// External model loading removed',
-            html_content
-        )
-    
-    return html_content
-
-# Create a fallback scene if all else fails
-def create_fallback_scene():
-    """Create a basic fallback scene when extraction fails"""
-    return """<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Fallback 3D Scene</title>
-    <style>
-        body { margin: 0; overflow: hidden; }
-        #info {
-            position: absolute;
-            top: 10px;
-            width: 100%;
-            text-align: center;
-            color: white;
-            font-family: Arial, sans-serif;
-            pointer-events: none;
-            text-shadow: 1px 1px 1px black;
-        }
-        #error {
-            position: absolute;
-            bottom: 20px;
-            width: 100%;
-            text-align: center;
-            color: #ff4444;
-            font-family: Arial, sans-serif;
-            font-weight: bold;
-            pointer-events: none;
-            text-shadow: 1px 1px 1px black;
-        }
-    </style>
-</head>
-<body>
-    <div id="info">Fallback 3D Scene</div>
-    <div id="error">Scene generation failed - See debug info</div>
-    <script src="https://unpkg.com/three@0.137.0/build/three.min.js"></script>
-    <script src="https://unpkg.com/three@0.137.0/examples/js/controls/OrbitControls.js"></script>
-    <script>
-    // Create a basic scene with an error message
-    const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x333344);
-    
-    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-    camera.position.set(0, 5, 10);
-    
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    document.body.appendChild(renderer.domElement);
-    
-    const controls = new THREE.OrbitControls(camera, renderer.domElement);
-    controls.enableDamping = true;
-    
-    // Add lights
-    const ambientLight = new THREE.AmbientLight(0x404040, 0.5);
-    scene.add(ambientLight);
-    
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
-    directionalLight.position.set(5, 10, 7.5);
-    scene.add(directionalLight);
-    
-    // Create a platform
-    const platformGeometry = new THREE.CylinderGeometry(5, 5, 0.5, 32);
-    const platformMaterial = new THREE.MeshPhongMaterial({ color: 0x888888 });
-    const platform = new THREE.Mesh(platformGeometry, platformMaterial);
-    platform.position.y = -0.25;
-    scene.add(platform);
-    
-    // Create error message cube
-    const cubeGeometry = new THREE.BoxGeometry(3, 3, 3);
-    const cubeMaterial = new THREE.MeshPhongMaterial({ color: 0xff4444 });
-    const cube = new THREE.Mesh(cubeGeometry, cubeMaterial);
-    cube.position.y = 1.5;
-    scene.add(cube);
-    
-    // Animation loop
-    function animate() {
-        requestAnimationFrame(animate);
-        cube.rotation.y += 0.01;
-        controls.update();
-        renderer.render(scene, camera);
-    }
-    animate();
-    
-    // Handle window resize
-    window.addEventListener('resize', function() {
-        camera.aspect = window.innerWidth / window.innerHeight;
-        camera.updateProjectionMatrix();
-        renderer.setSize(window.innerWidth, window.innerHeight);
-    });
-    </script>
-</body>
-</html>"""
-
-# Complete scene generation pipeline
-async def generate_scene_from_prompt(basic_prompt):
-    """Complete pipeline: enhance prompt then generate scene"""
-    # Step 1: Enhance the prompt with more details
-    enhanced_prompt, enhance_error = await enhance_prompt(basic_prompt)
-    
-    if enhance_error:
-        st.warning(f"Warning: Using basic prompt because enhancement failed: {enhance_error}")
-        prompt_to_use = basic_prompt
+    if not st.session_state.history:
+        st.sidebar.info("No scenes in history yet. Generate some scenes to see them here!")
     else:
-        prompt_to_use = enhanced_prompt
+        for i, item in enumerate(st.session_state.history):
+            scene_title = item["prompt"]
+            if len(scene_title) > 35:
+                scene_title = scene_title[:32] + "..."
+                
+            col1, col2 = st.sidebar.columns([3, 1])
+            with col1:
+                if st.button(f"{scene_title}", key=f"history_{i}", use_container_width=True):
+                    st.session_state.current_scene = item
+                    st.session_state.active_page = "generator"  # Switch to generator page when loading history
+                    st.experimental_rerun()
+            with col2:
+                # Add a delete button for each history item
+                if st.button("🗑️", key=f"delete_{i}", help="Delete from history"):
+                    st.session_state.history.pop(i)
+                    # If we deleted the current scene, reset it
+                    if st.session_state.current_scene and \
+                       st.session_state.current_scene.get("id", "") == item.get("id", ""):
+                        st.session_state.current_scene = None
+                    st.experimental_rerun()
     
-    # Step 2: Generate the scene with the enhanced prompt
-    html_content, debug_info = await generate_scene(prompt_to_use, basic_prompt)
+    # Add clear history button
+    if st.session_state.history:
+        if st.sidebar.button("Clear History", use_container_width=True):
+            st.session_state.history = []
+            st.experimental_rerun()
     
-    # Store both prompts and debug info
-    debug_info["original_prompt"] = basic_prompt
-    debug_info["enhanced_prompt"] = prompt_to_use
-    
-    return html_content, debug_info
+    # Add helpful tips at the bottom
+    with st.sidebar.expander("💡 Tips & Tricks", expanded=False):
+        st.markdown("""
+        - Use specific descriptions for better results
+        - Try generating landscapes, space scenes, or abstract art
+        - View the solar system demo for inspiration
+        - Check the code tab to learn Three.js techniques
+        - Downloaded scenes work in any browser
+        """)
 
-# Main app UI
-st.title("🎮 Instant 3D Scene Generator")
-st.write("Describe any scene and see it in 3D instantly!")
-
-# Main input form
-with st.form("scene_generator_form"):
-    user_prompt = st.text_area(
-        "Describe your 3D scene:",
-        placeholder="A lion sitting under a tree in a grassy field",
-        height=80
-    )
+# Generator page content
+def show_generator_page():
+    """Show the main scene generator page."""
+    st.title("🎮 AI Three.js Scene Generator")
+    st.write("Enter a description and get a 3D scene generated with Three.js")
     
-    generate_button = st.form_submit_button("Generate 3D Scene")
+    # Input form
+    with st.form("scene_generator_form"):
+        user_prompt = st.text_area(
+            "Describe your 3D scene:", 
+            placeholder="Describe your Three.js scene here! For example: A forest with trees, a flowing river, and birds flying overhead",
+            height=150
+        )
+        
+        col1, col2, col3 = st.columns([1, 1, 1])
+        with col1:
+            submitted = st.form_submit_button("Generate 3D Scene", use_container_width=True)
+        with col2:
+            example_button = st.form_submit_button("Use Random Example", use_container_width=True)
+        with col3:
+            advanced_options = st.checkbox("Advanced Options")
+        
+        if advanced_options:
+            st.write("Advanced generation options:")
+            temperature = st.slider("Creativity (Temperature)", min_value=0.0, max_value=1.0, value=0.2, step=0.1)
+            model_choice = st.selectbox("Claude Model", ["claude-3-opus-20240229", "claude-3-sonnet-20240229"])
+        else:
+            temperature = 0.2
+            model_choice = "claude-3-opus-20240229"
+        
+        # Handle random example
+        if example_button:
+            examples = [
+                "A solar system with textured planets orbiting around the sun",
+                "A peaceful forest scene with trees, a lake, and animated birds flying",
+                "A futuristic city with neon buildings and flying vehicles",
+                "An underwater scene with fish, coral, and bubbles rising to the surface",
+                "A mountain landscape with snow-capped peaks and a log cabin"
+            ]
+            import random
+            user_prompt = random.choice(examples)
+            submitted = True
+        
+        if submitted and user_prompt:
+            with st.spinner("Generating your 3D scene... (this may take up to 30 seconds)"):
+                st.session_state.current_timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+                
+                # Show temporary loading message
+                loading_placeholder = st.empty()
+                loading_placeholder.info("Getting creative with your scene description...")
+                
+                # Call Claude API with selected model and temperature
+                code, code_type, full_response = generate_threejs_code(user_prompt)
+                
+                if code:
+                    loading_placeholder.info("Preparing your 3D scene...")
+                    
+                    html_content = create_html_with_code(code, code_type)
+                    
+                    # Save current scene to state
+                    st.session_state.current_scene = {
+                        "id": f"scene_{int(time.time())}",
+                        "prompt": user_prompt,
+                        "html": html_content,
+                        "code": code,
+                        "code_type": code_type,
+                        "full_response": full_response,
+                        "timestamp": st.session_state.current_timestamp
+                    }
+                    
+                    # Add to history
+                    add_to_history(user_prompt, html_content)
+                    
+                    loading_placeholder.empty()
+                    st.success("Scene generated successfully!")
+                else:
+                    loading_placeholder.empty()
+                    st.error("Failed to generate Three.js code. Please try a different description or check the AI Response tab.")
     
-    if generate_button and user_prompt:
-        with st.spinner("Creating your 3D scene... (this may take up to a minute)"):
-            html_content, debug_info = asyncio.run(generate_scene_from_prompt(user_prompt))
-            
-            if html_content:
-                # Store the current scene
-                st.session_state.current_scene = {
-                    "prompt": user_prompt,
-                    "enhanced_prompt": debug_info.get("enhanced_prompt", user_prompt),
-                    "html": html_content,
-                    "debug_info": debug_info
-                }
-                st.success("Scene generated successfully!")
-            else:
-                st.error("Failed to generate scene. See debug tab for details.")
-                st.session_state.debug_info = debug_info
-
-# Create tabs for the scene and debug info
-tab1, tab2 = st.tabs(["3D Scene", "Scene Details"])
-
-with tab1:
     # Display current scene if available
-    if "current_scene" in st.session_state and st.session_state.current_scene:
+    if st.session_state.current_scene:
         scene = st.session_state.current_scene
         
-        # Show the scene in an HTML component
-        st.components.v1.html(scene["html"], height=600)
+        st.subheader(f"Scene: {scene['prompt']}")
         
-        # Information about navigating the scene
-        st.info("**Navigation:** Left-click + drag to rotate | Right-click + drag to pan | Scroll to zoom")
+        # Create a dedicated container for the 3D scene
+        scene_container = display_scene_container()
+        with scene_container:
+            try:
+                render_threejs_scene(scene["html"])
+            except Exception as e:
+                st.error(f"Error rendering scene: {str(e)}")
+                st.warning("The HTML content might contain errors. Check the code in the tabs below.")
         
-        # Download button
+        # Display code and response
+        tab1, tab2, tab3 = st.tabs(["Generated Code", "AI Response", "Debug"])
+        
+        with tab1:
+            st.code(scene.get("code", ""), language="html" if scene.get("code_type") == "html" else "javascript")
+            
+            # Download button for HTML
+            html_content = scene.get("html", "")
+            if html_content:
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.download_button(
+                        label="Download HTML",
+                        data=html_content,
+                        file_name="threejs_scene.html",
+                        mime="text/html",
+                        use_container_width=True
+                    )
+                with col2:
+                    # Add a button to view the scene in full-screen
+                    st.markdown(
+                        f'<a href="data:text/html;base64,{base64.b64encode(html_content.encode()).decode()}" target="_blank" style="text-decoration:none; width:100%;">'
+                        f'<div style="background-color:#4CAF50; padding:10px; color:white; text-align:center; border-radius:4px; cursor:pointer; width:100%;">View Full Screen</div>'
+                        f'</a>', 
+                        unsafe_allow_html=True
+                    )
+        
+        with tab2:
+            st.text_area("Full AI Response", value=scene.get("full_response", ""), height=400)
+        
+        with tab3:
+            st.write("Debug Information")
+            st.json({
+                "id": scene.get("id", ""),
+                "code_type": scene.get("code_type", ""),
+                "timestamp": scene.get("timestamp", ""),
+                "html_length": len(scene.get("html", "")),
+                "contains_three.js": "three.js" in scene.get("html", "").lower(),
+                "contains_orbitcontrols": "orbitcontrols" in scene.get("html", "").lower()
+            })
+            
+            if st.button("Force Reload Scene"):
+                st.experimental_rerun()
+    
+    # Instructions and tips at the bottom
+    with st.expander("📝 Tips for better results", expanded=False):
+        st.markdown("""
+        ### 💡 Tips for better results
+        - Be specific about colors, shapes, materials, and lighting
+        - Mention if you want animations or interactions
+        - Specify camera position and perspective if important
+        - Describe the mood or atmosphere you want to create
+        
+        ### 🚀 How to interact with the scene
+        - Left-click + drag: Rotate the camera
+        - Right-click + drag: Pan the camera
+        - Scroll: Zoom in/out
+        
+        ### 🛠️ Troubleshooting
+        - If a scene doesn't load, try clicking "Force Reload Scene"
+        - If you see errors, check the "Debug" tab for more information
+        - Some complex scenes may take longer to generate and load
+        """)
+
+# Demo page content
+def show_demo_page():
+    """Show the solar system demo page."""
+    st.title("🌌 Solar System Demo")
+    st.write("An interactive procedural solar system created with Three.js")
+    
+    # Description
+    with st.expander("About this demo", expanded=True):
+        st.markdown("""
+        This procedural solar system demo showcases what's possible with Three.js. Key features:
+        
+        - **Procedurally generated textures** for all planets and the sun
+        - **Realistic orbital mechanics** with different rotation speeds
+        - **Interactive controls**: rotate, pan, and zoom to explore
+        - **Planet labels** appear when you hover over objects
+        - **Physical accuracy**: relative planet sizes, orbits, and tilts
+        
+        This is a great example of what can be created with Three.js for science visualization, education, or games.
+        Hover over any planet to see its name!
+        """)
+    
+    # Render the solar system demo
+    render_threejs_scene(get_solar_system_demo(), height=700)
+    
+    # Features explanation
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.subheader("Technical Features")
+        st.markdown("""
+        - Canvas-based procedural texture generation
+        - Complex nested 3D transformations
+        - Dynamic lighting and materials
+        - Raycasting for interactive object selection
+        - Custom shader effects for the sun's glow
+        - Responsive design that works on all devices
+        """)
+    
+    with col2:
+        st.subheader("How to Use This Demo")
+        st.markdown("""
+        - **Click and drag** to orbit around the scene
+        - **Right-click and drag** to pan
+        - **Scroll** to zoom in and out
+        - **Hover** over any planet to see its name
+        - **Wait** to see planets orbit around the sun
+        - Observe Saturn's rings and Earth's moon
+        """)
+    
+    # Button to view source code
+    with st.expander("View Source Code", expanded=False):
+        st.code(get_solar_system_demo(), language="html")
+        
         st.download_button(
-            label="Download HTML",
-            data=scene["html"],
-            file_name="3d_scene.html",
+            label="Download Solar System Demo",
+            data=get_solar_system_demo(),
+            file_name="solar_system.html",
             mime="text/html"
         )
 
-with tab2:
-    if "current_scene" in st.session_state and st.session_state.current_scene:
-        scene = st.session_state.current_scene
-        
-        # Show the prompts
-        st.subheader("Prompts")
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.write("Original Prompt")
-            st.info(scene["prompt"])
-        
-        with col2:
-            st.write("Enhanced Prompt")
-            st.success(scene["enhanced_prompt"])
-        
-        # Show the HTML code
-        st.subheader("Generated HTML")
-        with st.expander("View HTML Code"):
-            st.code(scene["html"], language="html")
-        
-        # Show debug info
-        st.subheader("Debug Information")
-        with st.expander("View Debug Info"):
-            st.json(scene["debug_info"])
+# Main app logic
+def main():
+    """Main app function to control page flow."""
+    # Render the enhanced sidebar
+    render_enhanced_sidebar()
+    
+    # Show the appropriate page based on active_page state
+    if st.session_state.active_page == "generator":
+        show_generator_page()
+    elif st.session_state.active_page == "demo":
+        show_demo_page()
 
-# Instructions
-st.markdown("---")
-st.markdown("""
-### How it Works
-
-This app creates Three.js scenes from simple descriptions:
-
-1. **Your prompt** is enhanced with specific visual details
-2. The enhanced prompt is used to generate a complete HTML/JavaScript scene
-3. All objects are created using Three.js primitives (spheres, cubes, cylinders)
-4. No external 3D models or resources are used
-
-### Tips for Best Results
-
-- Keep descriptions simple but specific
-- Mention colors, positions, and basic shapes
-- For animals or characters, mention key features
-- Describe the environment and lighting conditions
-
-### Troubleshooting
-
-If elements are missing (like the lion), the app now fixes that by:
-- Removing attempts to load external models
-- Automatically creating objects from primitive shapes
-- Adding appropriate animations
-""")
+# Run the app
+if __name__ == "__main__":
+    main()
