@@ -32,11 +32,11 @@ def main():
 # Entry point of the application
 if __name__ == "__main__":
     main().write(f"Created: {scene['timestamp']}")
-                    if st.button("Load Scene", key=f"load_{index}"):
-                        load_from_history(index)
-                        st.rerun()
-        else:
-            st.info("No scenes in history yet. Create a scene to see it here!")
+    if st.button("Load Scene", key=f"load_{index}"):
+        load_from_history(index)
+        st.rerun()
+    else:
+        st.info("No scenes in history yet. Create a scene to see it here!")
     
     # Main content area
     st.title("🎮 Instant 3D Scene Generator")
