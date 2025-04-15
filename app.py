@@ -74,6 +74,13 @@ def generate_threejs_code(prompt):
     Format your response with a single code block containing complete HTML with the Three.js code embedded.
     The HTML should be a fully functional standalone page that can be saved and run directly in a browser.
     
+    CRITICAL: Make sure OrbitControls are properly initialized and working. The user MUST be able to:
+    - Rotate the camera by left-clicking and dragging
+    - Pan by right-clicking and dragging
+    - Zoom with the scroll wheel
+    
+    Test this functionality in your mental model before providing the final code.
+    
     Important guidelines:
     - For textures and models, use only URLs that are publicly accessible and stable
     - Make sure all event listeners are properly set up and removed when appropriate
@@ -89,7 +96,7 @@ def generate_threejs_code(prompt):
             temperature=0.2,
             system=system_prompt,
             messages=[
-                {"role": "user", "content": f"Create a Three.js scene with the following description: {prompt}. Make it visually interesting with good lighting and materials."}
+                {"role": "user", "content": f"Create a Three.js scene with the following description: {prompt}. Make it visually interesting with good lighting and materials. VERY IMPORTANT: Make sure OrbitControls work correctly so users can rotate, pan, and zoom with mouse interactions."}
             ]
         )
         code, code_type = extract_code(response.content[0].text)
@@ -121,7 +128,10 @@ def create_html_with_code(threejs_code, code_type):
         </head>
         <body>
             <script>
-            {threejs_code}
+            // Wait for DOM to fully load before executing Three.js code
+            document.addEventListener('DOMContentLoaded', function() {{
+                {threejs_code}
+            }});
             </script>
         </body>
         </html>
@@ -140,8 +150,55 @@ def add_to_history(prompt, html_content):
 
 def render_threejs_scene(html_content, height=600):
     """Render the Three.js scene in an iframe."""
-    # Use streamlit components to render HTML
-    st.components.v1.html(html_content, height=height, scrolling=False)
+    # Create a unique key for the iframe to prevent caching issues
+    import random
+    import string
+    random_id = ''.join(random.choices(string.ascii_letters + string.digits, k=10))
+    
+    # Modify html_content to include event listeners for iframe focus
+    html_with_focus = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <style>
+            body, html {{
+                margin: 0;
+                padding: 0;
+                height: 100%;
+                overflow: hidden;
+            }}
+            #iframe-container {{
+                width: 100%;
+                height: 100%;
+            }}
+            iframe {{
+                width: 100%;
+                height: 100%;
+                border: none;
+            }}
+        </style>
+    </head>
+    <body>
+        <div id="iframe-container">
+            <iframe id="scene-iframe-{random_id}" srcdoc='{html_content}' width="100%" height="{height}" 
+                    style="border:none; width:100%;" 
+                    sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
+                    allow="autoplay; camera; microphone; fullscreen">
+            </iframe>
+        </div>
+        <script>
+            // Focus script to help with controls
+            document.getElementById('scene-iframe-{random_id}').addEventListener('load', function() {{
+                this.focus();
+            }});
+        </script>
+    </body>
+    </html>
+    """
+    
+    # Use streamlit components to render HTML with focus handling
+    st.components.v1.html(html_with_focus, height=height, scrolling=False)
 
 # Sidebar
 with st.sidebar:
@@ -218,6 +275,10 @@ if st.session_state.current_scene:
     
     st.subheader(f"Scene: {scene['prompt']}")
     
+    # Help text for interaction
+    st.info("👆 Click on the scene to enable mouse controls. Left-click + drag to rotate, right-click + drag to pan, scroll to zoom.")
+    
+    # Render the scene
     render_threejs_scene(scene["html"])
     
     # Display code and response
@@ -246,7 +307,8 @@ st.markdown("""
 1. Enter a description of the 3D scene you want to create
 2. Click "Generate 3D Scene"
 3. The AI will create Three.js code and render the scene
-4. Interact with the scene using your mouse:
+4. **Important:** Click on the scene first to enable interaction
+5. Then interact with the scene using your mouse:
    - Left-click + drag: Rotate the camera
    - Right-click + drag: Pan the camera
    - Scroll: Zoom in/out
