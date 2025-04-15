@@ -1248,11 +1248,11 @@ def render_enhanced_sidebar():
     with col1:
         if st.button("🎮 Generator", use_container_width=True):
             st.session_state.active_page = "generator"
-            st.experimental_rerun()
+            st.rerun()
     with col2:
         if st.button("🌌 Demo Scene", use_container_width=True):
             st.session_state.active_page = "demo"
-            st.experimental_rerun()
+            st.rerun()
     
     # Add separator
     st.sidebar.markdown("---")
@@ -1273,7 +1273,7 @@ def render_enhanced_sidebar():
                 if st.button(f"{scene_title}", key=f"history_{i}", use_container_width=True):
                     st.session_state.current_scene = item
                     st.session_state.active_page = "generator"  # Switch to generator page when loading history
-                    st.experimental_rerun()
+                    st.rerun()
             with col2:
                 # Add a delete button for each history item
                 if st.button("🗑️", key=f"delete_{i}", help="Delete from history"):
@@ -1282,13 +1282,13 @@ def render_enhanced_sidebar():
                     if st.session_state.current_scene and \
                        st.session_state.current_scene.get("id", "") == item.get("id", ""):
                         st.session_state.current_scene = None
-                    st.experimental_rerun()
+                    st.rerun()
     
     # Add clear history button
     if st.session_state.history:
         if st.sidebar.button("Clear History", use_container_width=True):
             st.session_state.history = []
-            st.experimental_rerun()
+            st.rerun()
     
     # Add helpful tips at the bottom
     with st.sidebar.expander("💡 Tips & Tricks", expanded=False):
@@ -1436,7 +1436,7 @@ def show_generator_page():
             })
             
             if st.button("Force Reload Scene"):
-                st.experimental_rerun()
+                st.rerun()
     
     # Instructions and tips at the bottom
     with st.expander("📝 Tips for better results", expanded=False):
