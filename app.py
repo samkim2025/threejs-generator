@@ -221,7 +221,7 @@ SOLAR_SYSTEM_HTML = """<!DOCTYPE html>
 </body>
 </html>"""
 
-# Example prompts for the scene generator
+# Example mappings with a lion example for animal scenes
 EXAMPLE_MAPPINGS = [
     {
         "simple": "A cool city with many buildings",
@@ -232,6 +232,288 @@ EXAMPLE_MAPPINGS = [
         "enhanced": "Create a serene 3D scene featuring a golden-maned lion resting under the shade of a tall acacia tree in an expansive grassy savanna. The scene should include a detailed lion constructed from primitive Three.js shapes (spheres, cylinders, and boxes) with a tawny body, distinctive mane, and relaxed posture. The acacia tree should have a thick trunk and a wide, umbrella-like canopy of leaves providing dappled shade. Surrounding them, tall grass should sway gently in a simulated breeze. Implement a day-night cycle with changing lighting conditions, casting realistic shadows across the scene. Allow users to orbit around the scene with camera controls to view the lion and its environment from different angles."
     }
 ]
+
+# Example HTML for animal scene with lion created from primitives
+LION_EXAMPLE_HTML = """<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lion Under Tree Scene</title>
+    <style>
+        body { margin: 0; overflow: hidden; }
+        canvas { display: block; }
+        #info {
+            position: absolute;
+            top: 10px;
+            width: 100%;
+            text-align: center;
+            color: white;
+            font-family: Arial, sans-serif;
+            pointer-events: none;
+            text-shadow: 1px 1px 1px black;
+        }
+    </style>
+</head>
+<body>
+    <div id="info">Lion Under Tree - Use mouse to navigate</div>
+    <script src="https://unpkg.com/three@0.137.0/build/three.min.js"></script>
+    <script src="https://unpkg.com/three@0.137.0/examples/js/controls/OrbitControls.js"></script>
+    <script>
+        // Scene setup
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x87CEEB);
+        
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(0, 5, 10);
+        
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        document.body.appendChild(renderer.domElement);
+        
+        // Orbit controls
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        
+        // Lights
+        const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
+        scene.add(ambientLight);
+        
+        const directionalLight = new THREE.DirectionalLight(0xFFFFFF, 1);
+        directionalLight.position.set(5, 8, 5);
+        directionalLight.castShadow = true;
+        directionalLight.shadow.mapSize.width = 1024;
+        directionalLight.shadow.mapSize.height = 1024;
+        scene.add(directionalLight);
+        
+        // Ground
+        const groundGeometry = new THREE.PlaneGeometry(100, 100);
+        const groundMaterial = new THREE.MeshStandardMaterial({ color: 0x8B4513 });
+        const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+        ground.rotation.x = -Math.PI / 2;
+        ground.receiveShadow = true;
+        scene.add(ground);
+        
+        // Grass
+        const grassGeometry = new THREE.PlaneGeometry(100, 100, 50, 50);
+        const grassMaterial = new THREE.MeshStandardMaterial({ 
+            color: 0x7CFC00,
+            roughness: 0.8
+        });
+        const grass = new THREE.Mesh(grassGeometry, grassMaterial);
+        grass.rotation.x = -Math.PI / 2;
+        grass.position.y = 0.05;
+        grass.receiveShadow = true;
+        scene.add(grass);
+        
+        // Tree
+        function createTree(x, z) {
+            const treeGroup = new THREE.Group();
+            
+            // Trunk
+            const trunkGeometry = new THREE.CylinderGeometry(0.5, 0.8, 5, 8);
+            const trunkMaterial = new THREE.MeshStandardMaterial({ color: 0x8B4513 });
+            const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
+            trunk.position.y = 2.5;
+            trunk.castShadow = true;
+            trunk.receiveShadow = true;
+            treeGroup.add(trunk);
+            
+            // Canopy
+            const canopyGeometry = new THREE.SphereGeometry(4, 16, 16);
+            const canopyMaterial = new THREE.MeshStandardMaterial({ color: 0x228B22 });
+            const canopy = new THREE.Mesh(canopyGeometry, canopyMaterial);
+            canopy.position.y = 7;
+            canopy.scale.y = 0.7;
+            canopy.castShadow = true;
+            treeGroup.add(canopy);
+            
+            treeGroup.position.set(x, 0, z);
+            scene.add(treeGroup);
+            
+            return treeGroup;
+        }
+        
+        const tree = createTree(3, 2);
+        
+        // Create lion using primitives
+        function createLion() {
+            const lionGroup = new THREE.Group();
+            
+            // Body
+            const bodyGeometry = new THREE.SphereGeometry(1, 16, 16);
+            const bodyMaterial = new THREE.MeshStandardMaterial({ color: 0xC2B280 });
+            const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
+            body.scale.set(1.2, 1, 1.5);
+            body.position.y = 1.1;
+            body.castShadow = true;
+            lionGroup.add(body);
+            
+            // Head
+            const headGeometry = new THREE.SphereGeometry(0.7, 16, 16);
+            const headMaterial = new THREE.MeshStandardMaterial({ color: 0xC2B280 });
+            const head = new THREE.Mesh(headGeometry, headMaterial);
+            head.position.set(1.2, 1.5, 0);
+            head.castShadow = true;
+            lionGroup.add(head);
+            
+            // Mane
+            const maneGeometry = new THREE.SphereGeometry(1, 16, 16);
+            const maneMaterial = new THREE.MeshStandardMaterial({ color: 0xCD853F });
+            const mane = new THREE.Mesh(maneGeometry, maneMaterial);
+            mane.position.set(1.2, 1.5, 0);
+            mane.scale.set(1.2, 1.2, 1.2);
+            mane.castShadow = true;
+            lionGroup.add(mane);
+            
+            // Face
+            const snoutGeometry = new THREE.CylinderGeometry(0.2, 0.3, 0.4, 8);
+            const snoutMaterial = new THREE.MeshStandardMaterial({ color: 0xD2B48C });
+            const snout = new THREE.Mesh(snoutGeometry, snoutMaterial);
+            snout.position.set(1.7, 1.4, 0);
+            snout.rotation.z = Math.PI / 2;
+            snout.castShadow = true;
+            lionGroup.add(snout);
+            
+            // Eyes
+            const eyeGeometry = new THREE.SphereGeometry(0.1, 8, 8);
+            const eyeMaterial = new THREE.MeshStandardMaterial({ color: 0x000000 });
+            
+            const leftEye = new THREE.Mesh(eyeGeometry, eyeMaterial);
+            leftEye.position.set(1.6, 1.7, 0.3);
+            lionGroup.add(leftEye);
+            
+            const rightEye = new THREE.Mesh(eyeGeometry, eyeMaterial);
+            rightEye.position.set(1.6, 1.7, -0.3);
+            lionGroup.add(rightEye);
+            
+            // Legs
+            const legGeometry = new THREE.CylinderGeometry(0.2, 0.2, 1, 8);
+            const legMaterial = new THREE.MeshStandardMaterial({ color: 0xC2B280 });
+            
+            const frontLeftLeg = new THREE.Mesh(legGeometry, legMaterial);
+            frontLeftLeg.position.set(0.6, 0.5, 0.5);
+            frontLeftLeg.castShadow = true;
+            lionGroup.add(frontLeftLeg);
+            
+            const frontRightLeg = new THREE.Mesh(legGeometry, legMaterial);
+            frontRightLeg.position.set(0.6, 0.5, -0.5);
+            frontRightLeg.castShadow = true;
+            lionGroup.add(frontRightLeg);
+            
+            const backLeftLeg = new THREE.Mesh(legGeometry, legMaterial);
+            backLeftLeg.position.set(-0.6, 0.5, 0.5);
+            backLeftLeg.castShadow = true;
+            lionGroup.add(backLeftLeg);
+            
+            const backRightLeg = new THREE.Mesh(legGeometry, legMaterial);
+            backRightLeg.position.set(-0.6, 0.5, -0.5);
+            backRightLeg.castShadow = true;
+            lionGroup.add(backRightLeg);
+            
+            // Tail
+            const tailGeometry = new THREE.CylinderGeometry(0.1, 0.15, 1.5, 8);
+            const tailMaterial = new THREE.MeshStandardMaterial({ color: 0xC2B280 });
+            const tail = new THREE.Mesh(tailGeometry, tailMaterial);
+            tail.position.set(-1.5, 1.2, 0);
+            tail.rotation.z = Math.PI / 4;
+            tail.castShadow = true;
+            lionGroup.add(tail);
+            
+            // Tail tuft
+            const tuftGeometry = new THREE.SphereGeometry(0.2, 8, 8);
+            const tuftMaterial = new THREE.MeshStandardMaterial({ color: 0x8B4513 });
+            const tuft = new THREE.Mesh(tuftGeometry, tuftMaterial);
+            tuft.position.set(-2, 1.8, 0);
+            tuft.castShadow = true;
+            lionGroup.add(tuft);
+            
+            // Position the lion
+            lionGroup.position.set(-2, 0, 0);
+            scene.add(lionGroup);
+            
+            return lionGroup;
+        }
+        
+        const lion = createLion();
+        
+        // Create grass tufts
+        for (let i = 0; i < 200; i++) {
+            const tuftGeometry = new THREE.ConeGeometry(0.2, 1, 4);
+            const tuftMaterial = new THREE.MeshStandardMaterial({ 
+                color: 0x7CFC00,
+                side: THREE.DoubleSide
+            });
+            const tuft = new THREE.Mesh(tuftGeometry, tuftMaterial);
+            
+            const x = Math.random() * 80 - 40;
+            const z = Math.random() * 80 - 40;
+            
+            // Don't place grass too close to the lion or tree
+            const distToLion = Math.sqrt(Math.pow(x - lion.position.x, 2) + Math.pow(z - lion.position.z, 2));
+            const distToTree = Math.sqrt(Math.pow(x - tree.position.x, 2) + Math.pow(z - tree.position.z, 2));
+            
+            if (distToLion > 4 && distToTree > 5) {
+                tuft.position.set(x, 0.5, z);
+                tuft.rotation.y = Math.random() * Math.PI;
+                tuft.castShadow = true;
+                scene.add(tuft);
+            }
+        }
+        
+        // Day/night cycle
+        let time = 0;
+        
+        // Animation
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            // Update controls
+            controls.update();
+            
+            // Update time and day/night cycle
+            time += 0.002;
+            const daylight = Math.sin(time) * 0.5 + 0.5;
+            ambientLight.intensity = 0.1 + daylight * 0.5;
+            directionalLight.intensity = daylight;
+            
+            // Position the sun
+            directionalLight.position.x = Math.sin(time) * 10;
+            directionalLight.position.y = Math.sin(time) * 5 + 5;
+            directionalLight.position.z = Math.cos(time) * 10;
+            
+            // Change sky color based on time
+            const r = 0.5 + daylight * 0.3;
+            const g = 0.6 + daylight * 0.4;
+            const b = 0.8 + daylight * 0.2;
+            scene.background.setRGB(r, g, b);
+            
+            // Animate lion (subtle breathing)
+            lion.children[0].scale.y = 1 + Math.sin(time * 3) * 0.05;
+            lion.children[2].scale.y = 1 + Math.sin(time * 3) * 0.05;
+            
+            // Animate tail
+            lion.children[9].rotation.z = Math.PI / 4 + Math.sin(time * 2) * 0.2;
+            lion.children[10].position.x = -2 + Math.sin(time * 2) * 0.1;
+            lion.children[10].position.y = 1.8 + Math.sin(time * 2) * 0.1;
+            
+            renderer.render(scene, camera);
+        }
+        
+        // Handle window resize
+        window.addEventListener('resize', function() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+        
+        // Start animation
+        animate();
+    </script>
+</body>
+</html>"""
 
 # Enhanced prompt function using explicit examples
 async def enhance_prompt(basic_prompt):
@@ -316,10 +598,295 @@ async def generate_scene(prompt, simple_prompt):
             break
     
     if not best_example:
-        best_example = EXAMPLE_MAPPINGS[0]  # Default to the first example
+        best_example = EXAMPLE_MAPPINGS[0]  # Default to city example
         best_example_index = 0
     
-    # Create a system prompt with the example
+    # Create a system prompt with the full mapping example
+    example_html = LION_EXAMPLE_HTML if best_example_index == 1 else """<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D City Scene</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+        }
+        canvas {
+            display: block;
+        }
+        #info {
+            position: absolute;
+            top: 10px;
+            width: 100%;
+            text-align: center;
+            color: white;
+            font-family: Arial, sans-serif;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="info">3D City Scene - Use mouse to navigate</div>
+    <script src="https://unpkg.com/three@0.137.0/build/three.min.js"></script>
+    <script src="https://unpkg.com/three@0.137.0/examples/js/controls/OrbitControls.js"></script>
+    <script>
+        // Scene, camera, renderer setup
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+        
+        // Background
+        scene.background = new THREE.Color(0x87CEEB);
+        
+        // Camera and controls
+        camera.position.set(30, 30, 30);
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        
+        // Lights
+        const ambientLight = new THREE.AmbientLight(0x404040, 0.5);
+        scene.add(ambientLight);
+        
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+        directionalLight.position.set(50, 100, 50);
+        directionalLight.castShadow = true;
+        scene.add(directionalLight);
+        
+        // Ground
+        const groundGeometry = new THREE.PlaneBufferGeometry(200, 200);
+        const groundMaterial = new THREE.MeshStandardMaterial({ color: 0x333333 });
+        const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+        ground.rotation.x = -Math.PI / 2;
+        ground.receiveShadow = true;
+        scene.add(ground);
+        
+        // Buildings
+        function createBuilding(x, z, width, height, depth) {
+            const buildingGeometry = new THREE.BoxBufferGeometry(width, height, depth);
+            const buildingMaterial = new THREE.MeshStandardMaterial({
+                color: Math.random() > 0.5 ? 0x808080 : 0xa0a0a0,
+                roughness: 0.7
+            });
+            
+            const building = new THREE.Mesh(buildingGeometry, buildingMaterial);
+            building.position.set(x, height/2, z);
+            building.castShadow = true;
+            building.receiveShadow = true;
+            scene.add(building);
+            
+            // Add windows
+            if (height > 5) {
+                const windowSize = 0.5;
+                const windowGeometry = new THREE.PlaneBufferGeometry(windowSize, windowSize);
+                const windowMaterial = new THREE.MeshStandardMaterial({
+                    color: 0xaaaaff,
+                    emissive: 0x555555,
+                    emissiveIntensity: 0.2
+                });
+                
+                // Calculate number of windows based on building size
+                const windowsPerFloor = Math.max(1, Math.floor(width / 2));
+                const floors = Math.max(1, Math.floor(height / 3));
+                
+                for (let floor = 0; floor < floors; floor++) {
+                    for (let i = 0; i < windowsPerFloor; i++) {
+                        // Front windows
+                        const frontWindow = new THREE.Mesh(windowGeometry, windowMaterial.clone());
+                        frontWindow.position.set(
+                            x - width/2 + (i + 0.5) * (width / windowsPerFloor),
+                            floor * 3 + 1.5,
+                            z + depth/2 + 0.01
+                        );
+                        scene.add(frontWindow);
+                        
+                        // Back windows
+                        const backWindow = new THREE.Mesh(windowGeometry, windowMaterial.clone());
+                        backWindow.position.set(
+                            x - width/2 + (i + 0.5) * (width / windowsPerFloor),
+                            floor * 3 + 1.5,
+                            z - depth/2 - 0.01
+                        );
+                        backWindow.rotation.y = Math.PI;
+                        scene.add(backWindow);
+                    }
+                }
+            }
+            
+            return building;
+        }
+        
+        // Create buildings in a grid
+        const buildings = [];
+        for (let x = -80; x < 80; x += 20) {
+            for (let z = -80; z < 80; z += 20) {
+                // Vary building sizes
+                const width = 5 + Math.random() * 10;
+                const height = 5 + Math.random() * 40;
+                const depth = 5 + Math.random() * 10;
+                
+                // Add random offset to position
+                const offsetX = (Math.random() - 0.5) * 10;
+                const offsetZ = (Math.random() - 0.5) * 10;
+                
+                // Create building
+                const building = createBuilding(x + offsetX, z + offsetZ, width, height, depth);
+                buildings.push(building);
+            }
+        }
+        
+        // Create roads
+        function createRoad(x1, z1, x2, z2, width) {
+            const length = Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(z2 - z1, 2));
+            const roadGeometry = new THREE.PlaneBufferGeometry(length, width);
+            const roadMaterial = new THREE.MeshStandardMaterial({ color: 0x333333 });
+            const road = new THREE.Mesh(roadGeometry, roadMaterial);
+            
+            // Position and rotate to connect the points
+            road.position.set((x1 + x2) / 2, 0.01, (z1 + z2) / 2);
+            road.rotation.x = -Math.PI / 2;
+            road.rotation.z = Math.atan2(z2 - z1, x2 - x1);
+            
+            road.receiveShadow = true;
+            scene.add(road);
+            
+            return road;
+        }
+        
+        // Create grid of roads
+        const roads = [];
+        for (let i = -80; i <= 80; i += 20) {
+            // Horizontal roads
+            createRoad(-80, i, 80, i, 10);
+            // Vertical roads
+            createRoad(i, -80, i, 80, 10);
+        }
+        
+        // Create cars
+        const cars = [];
+        function createCar() {
+            const car = new THREE.Group();
+            
+            // Car body
+            const bodyGeometry = new THREE.BoxBufferGeometry(2, 0.7, 1);
+            const bodyMaterial = new THREE.MeshStandardMaterial({
+                color: Math.random() * 0xffffff
+            });
+            const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
+            body.castShadow = true;
+            car.add(body);
+            
+            // Car top
+            const topGeometry = new THREE.BoxBufferGeometry(1, 0.5, 0.9);
+            const topMaterial = new THREE.MeshStandardMaterial({
+                color: 0x333333
+            });
+            const top = new THREE.Mesh(topGeometry, topMaterial);
+            top.position.y = 0.6;
+            top.castShadow = true;
+            car.add(top);
+            
+            // wheels
+            const wheelGeometry = new THREE.CylinderBufferGeometry(0.3, 0.3, 0.2, 8);
+            const wheelMaterial = new THREE.MeshStandardMaterial({ color: 0x333333 });
+            
+            const wheel1 = new THREE.Mesh(wheelGeometry, wheelMaterial);
+            wheel1.position.set(0.7, -0.3, 0.5);
+            wheel1.rotation.z = Math.PI / 2;
+            car.add(wheel1);
+            
+            const wheel2 = new THREE.Mesh(wheelGeometry, wheelMaterial);
+            wheel2.position.set(0.7, -0.3, -0.5);
+            wheel2.rotation.z = Math.PI / 2;
+            car.add(wheel2);
+            
+            const wheel3 = new THREE.Mesh(wheelGeometry, wheelMaterial);
+            wheel3.position.set(-0.7, -0.3, 0.5);
+            wheel3.rotation.z = Math.PI / 2;
+            car.add(wheel3);
+            
+            const wheel4 = new THREE.Mesh(wheelGeometry, wheelMaterial);
+            wheel4.position.set(-0.7, -0.3, -0.5);
+            wheel4.rotation.z = Math.PI / 2;
+            car.add(wheel4);
+            
+            // Add to scene
+            scene.add(car);
+            
+            // Random position on a road
+            const lane = Math.floor(Math.random() * 9) - 4;
+            const randomPos = (Math.random() - 0.5) * 160;
+            
+            if (Math.random() > 0.5) {
+                // Horizontal road
+                car.position.set(randomPos, 0.6, lane * 20);
+                car.rotation.y = Math.random() > 0.5 ? 0 : Math.PI;
+            } else {
+                // Vertical road
+                car.position.set(lane * 20, 0.6, randomPos);
+                car.rotation.y = Math.random() > 0.5 ? Math.PI / 2 : -Math.PI / 2;
+            }
+            
+            // Store direction
+            car.userData.direction = car.rotation.y;
+            car.userData.speed = 0.1 + Math.random() * 0.1;
+            
+            return car;
+        }
+        
+        // Create cars
+        for (let i = 0; i < 30; i++) {
+            cars.push(createCar());
+        }
+        
+        // Animation loop
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            // Update car positions
+            cars.forEach(car => {
+                const speed = car.userData.speed;
+                
+                // Move car based on its rotation
+                if (car.rotation.y === 0) {
+                    car.position.x += speed;
+                    if (car.position.x > 85) car.position.x = -85;
+                } else if (Math.abs(car.rotation.y - Math.PI) < 0.1) {
+                    car.position.x -= speed;
+                    if (car.position.x < -85) car.position.x = 85;
+                } else if (Math.abs(car.rotation.y - Math.PI/2) < 0.1) {
+                    car.position.z -= speed;
+                    if (car.position.z < -85) car.position.z = 85;
+                } else {
+                    car.position.z += speed;
+                    if (car.position.z > 85) car.position.z = -85;
+                }
+            });
+            
+            // Update controls
+            controls.update();
+            
+            // Render scene
+            renderer.render(scene, camera);
+        }
+        
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+        
+        // Start animation loop
+        animate();
+    </script>
+</body>
+</html>"""
+    
     system_prompt = f"""You are an expert Three.js developer who creates complete, working 3D web applications.
 
 I'll provide you with a description of a 3D scene. Your task is to generate a SINGLE, COMPLETE HTML file containing a Three.js scene that implements this description.
@@ -331,6 +898,8 @@ Here's an example of the transformation from simple prompt to enhanced descripti
 SIMPLE PROMPT: "{best_example['simple']}"
 
 ENHANCED DESCRIPTION: "{best_example['enhanced']}"
+
+WORKING HTML: {example_html}
 
 Now, create a scene based on this description: "{prompt}"
 
@@ -509,37 +1078,131 @@ def remove_gltf_loader(html_content):
         html_content
     )
     
-    # If GLTFLoader is found, inject primitive shape creation instead
+    # If GLTFLoader is found, inject the lion example code
     if "GLTFLoader" in html_content or "loader.load(" in html_content:
         html_content = html_content.replace("</body>", """
     <script>
         // Alert about external model attempt
         console.warn("External model loading detected and removed. Using primitive shapes instead.");
         
-        // Create a basic shape as fallback
-        function createBasicShape() {
-            const group = new THREE.Group();
+        // Create lion using primitives
+        function createLion() {
+            const lionGroup = new THREE.Group();
             
             // Body
-            const bodyGeometry = new THREE.SphereGeometry(2, 16, 16);
-            const bodyMaterial = new THREE.MeshStandardMaterial({ color: 0x0088ff });
+            const bodyGeometry = new THREE.SphereGeometry(1, 16, 16);
+            const bodyMaterial = new THREE.MeshStandardMaterial({ color: 0xC2B280 });
             const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
+            body.scale.set(1.2, 1, 1.5);
+            body.position.y = 1.1;
             body.castShadow = true;
-            group.add(body);
+            lionGroup.add(body);
             
-            // Add to scene
-            scene.add(group);
+            // Head
+            const headGeometry = new THREE.SphereGeometry(0.7, 16, 16);
+            const headMaterial = new THREE.MeshStandardMaterial({ color: 0xC2B280 });
+            const head = new THREE.Mesh(headGeometry, headMaterial);
+            head.position.set(1.2, 1.5, 0);
+            head.castShadow = true;
+            lionGroup.add(head);
             
-            return group;
+            // Mane
+            const maneGeometry = new THREE.SphereGeometry(1, 16, 16);
+            const maneMaterial = new THREE.MeshStandardMaterial({ color: 0xCD853F });
+            const mane = new THREE.Mesh(maneGeometry, maneMaterial);
+            mane.position.set(1.2, 1.5, 0);
+            mane.scale.set(1.2, 1.2, 1.2);
+            mane.castShadow = true;
+            lionGroup.add(mane);
+            
+            // Face
+            const snoutGeometry = new THREE.CylinderGeometry(0.2, 0.3, 0.4, 8);
+            const snoutMaterial = new THREE.MeshStandardMaterial({ color: 0xD2B48C });
+            const snout = new THREE.Mesh(snoutGeometry, snoutMaterial);
+            snout.position.set(1.7, 1.4, 0);
+            snout.rotation.z = Math.PI / 2;
+            snout.castShadow = true;
+            lionGroup.add(snout);
+            
+            // Eyes
+            const eyeGeometry = new THREE.SphereGeometry(0.1, 8, 8);
+            const eyeMaterial = new THREE.MeshStandardMaterial({ color: 0x000000 });
+            
+            const leftEye = new THREE.Mesh(eyeGeometry, eyeMaterial);
+            leftEye.position.set(1.6, 1.7, 0.3);
+            lionGroup.add(leftEye);
+            
+            const rightEye = new THREE.Mesh(eyeGeometry, eyeMaterial);
+            rightEye.position.set(1.6, 1.7, -0.3);
+            lionGroup.add(rightEye);
+            
+            // Legs
+            const legGeometry = new THREE.CylinderGeometry(0.2, 0.2, 1, 8);
+            const legMaterial = new THREE.MeshStandardMaterial({ color: 0xC2B280 });
+            
+            const frontLeftLeg = new THREE.Mesh(legGeometry, legMaterial);
+            frontLeftLeg.position.set(0.6, 0.5, 0.5);
+            frontLeftLeg.castShadow = true;
+            lionGroup.add(frontLeftLeg);
+            
+            const frontRightLeg = new THREE.Mesh(legGeometry, legMaterial);
+            frontRightLeg.position.set(0.6, 0.5, -0.5);
+            frontRightLeg.castShadow = true;
+            lionGroup.add(frontRightLeg);
+            
+            const backLeftLeg = new THREE.Mesh(legGeometry, legMaterial);
+            backLeftLeg.position.set(-0.6, 0.5, 0.5);
+            backLeftLeg.castShadow = true;
+            lionGroup.add(backLeftLeg);
+            
+            const backRightLeg = new THREE.Mesh(legGeometry, legMaterial);
+            backRightLeg.position.set(-0.6, 0.5, -0.5);
+            backRightLeg.castShadow = true;
+            lionGroup.add(backRightLeg);
+            
+            // Tail
+            const tailGeometry = new THREE.CylinderGeometry(0.1, 0.15, 1.5, 8);
+            const tailMaterial = new THREE.MeshStandardMaterial({ color: 0xC2B280 });
+            const tail = new THREE.Mesh(tailGeometry, tailMaterial);
+            tail.position.set(-1.5, 1.2, 0);
+            tail.rotation.z = Math.PI / 4;
+            tail.castShadow = true;
+            lionGroup.add(tail);
+            
+            // Tail tuft
+            const tuftGeometry = new THREE.SphereGeometry(0.2, 8, 8);
+            const tuftMaterial = new THREE.MeshStandardMaterial({ color: 0x8B4513 });
+            const tuft = new THREE.Mesh(tuftGeometry, tuftMaterial);
+            tuft.position.set(-2, 1.8, 0);
+            tuft.castShadow = true;
+            lionGroup.add(tuft);
+            
+            // Position the lion
+            lionGroup.position.set(-2, 0, 0);
+            scene.add(lionGroup);
+            
+            return lionGroup;
         }
         
-        const shape = createBasicShape();
+        const lion = createLion();
+        let animateLion = function(time) {
+            // Animate lion (subtle breathing)
+            lion.children[0].scale.y = 1 + Math.sin(time * 3) * 0.05;
+            lion.children[2].scale.y = 1 + Math.sin(time * 3) * 0.05;
+            
+            // Animate tail
+            lion.children[9].rotation.z = Math.PI / 4 + Math.sin(time * 2) * 0.2;
+            lion.children[10].position.x = -2 + Math.sin(time * 2) * 0.1;
+            lion.children[10].position.y = 1.8 + Math.sin(time * 2) * 0.1;
+        };
         
-        // Update the animation function to include shape animation
+        // Update the animation function to include lion animation
         const originalAnimateFunction = animate;
         animate = function() {
             let time = Date.now() * 0.001;
-            shape.rotation.y += 0.01;
+            if (typeof animateLion === 'function') {
+                animateLion(time);
+            }
             originalAnimateFunction();
         };
     </script>
@@ -820,6 +1483,6 @@ def main():
         else:
             st.info("Generate a scene to see details here.")
 
-# Entry point of the application
+# Instructions
 if __name__ == "__main__":
     main()
